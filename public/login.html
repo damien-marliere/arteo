@@ -7,9 +7,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/assets/app.css" />
 <style>
-  body { display:flex; min-height:100vh; align-items:center; justify-content:center;
+  body { display:flex; min-height:100vh; align-items:center; justify-content:center; padding:40px 20px;
          background: radial-gradient(900px 500px at 50% -10%, #ede9fe, var(--bg)); }
-  .box { background:#fff; border:1px solid var(--line); border-radius:18px; padding:32px; width:380px; box-shadow:var(--shadow-lg); }
+  .wrap { width:100%; max-width:380px; transition:max-width .2s; }
+  .wrap.signup { max-width:980px; }
+  .box { background:#fff; border:1px solid var(--line); border-radius:18px; padding:32px; box-shadow:var(--shadow-lg); }
   .box .logo { justify-content:center; margin-bottom:6px; }
   .sub { color:var(--muted); font-size:14px; text-align:center; margin-bottom:22px; }
   .toggle { text-align:center; margin-top:16px; font-size:14px; color:var(--muted); }
@@ -17,34 +19,99 @@
   .err { color:var(--red); font-size:13px; margin-top:10px; min-height:18px; text-align:center; }
   .biz { display:none; }
   .home { position:fixed; top:20px; left:24px; }
+  /* essai gratuit */
+  .trial { display:none; background:linear-gradient(90deg,#ecfdf5,#eef2ff); border:1px solid #bbf7d0;
+           border-radius:14px; padding:14px 18px; text-align:center; margin-bottom:22px; }
+  .trial b { color:#15803d; } .trial small { color:var(--muted); display:block; margin-top:3px; font-size:13px; }
+  /* sélection de formule */
+  .plansWrap { display:none; margin-bottom:26px; }
+  .plansWrap h3.t { text-align:center; font-size:15px; color:var(--muted); font-weight:600; margin:0 0 16px; text-transform:uppercase; letter-spacing:.05em; }
+  .plans { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+  .pl { border:2px solid var(--line); border-radius:16px; padding:22px 20px; cursor:pointer; background:#fff;
+        transition:border-color .15s, box-shadow .15s, transform .1s; position:relative; }
+  .pl:hover { transform:translateY(-2px); box-shadow:var(--shadow); }
+  .pl.sel { border-color:var(--brand); box-shadow:0 0 0 4px var(--brand-soft); }
+  .pl .tag { position:absolute; top:-11px; left:50%; transform:translateX(-50%); background:var(--brand); color:#fff;
+             font-size:11px; font-weight:700; padding:3px 12px; border-radius:999px; white-space:nowrap; }
+  .pl .nm { font-weight:800; font-size:17px; }
+  .pl .pr { font-size:30px; font-weight:800; margin:6px 0 2px; }
+  .pl .pr span { font-size:14px; font-weight:500; color:var(--muted); }
+  .pl ul { list-style:none; padding:0; margin:14px 0 0; }
+  .pl li { font-size:13px; color:var(--ink); padding:4px 0; display:flex; gap:8px; }
+  .pl li::before { content:"✓"; color:var(--accent); font-weight:800; }
+  .pl .check { position:absolute; top:14px; right:16px; width:20px; height:20px; border-radius:50%;
+               border:2px solid var(--line); display:flex; align-items:center; justify-content:center; font-size:12px; color:#fff; }
+  .pl.sel .check { background:var(--brand); border-color:var(--brand); }
+  @media (max-width:760px){ .plans { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
 <a class="home logo" href="/"><span class="mark">A</span> Artéo</a>
-<div class="box">
-  <div class="logo"><span class="mark">A</span> Artéo</div>
-  <div class="sub" id="sub">Connectez-vous à votre espace artisan</div>
-  <div class="biz" id="bizField"><label>Nom de l'entreprise</label><input id="businessName" placeholder="Plomberie Martin" /></div>
-  <label>Email</label><input id="email" type="email" placeholder="vous@entreprise.fr" />
-  <label>Mot de passe</label><input id="password" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitForm()" />
-  <button class="btn btn-primary btn-block" id="btn" style="margin-top:18px" onclick="submitForm()">Se connecter</button>
-  <div class="err" id="err"></div>
-  <div class="toggle" id="toggle">Pas encore de compte ? <a onclick="setMode('signup')">Créer un compte</a></div>
+<div class="wrap" id="wrap">
+  <div class="trial" id="trial">
+    <b>✓ 7 jours d'essai gratuit sur la facturation</b>
+    <small>Sans carte bancaire. Créez et envoyez vos factures électroniques tout de suite.</small>
+  </div>
+
+  <div class="plansWrap" id="plansWrap">
+    <h3 class="t">Choisissez votre formule</h3>
+    <div class="plans" id="plans">
+      <div class="pl" data-plan="starter" onclick="pickPlan('starter')">
+        <div class="check">✓</div>
+        <div class="nm">Starter</div>
+        <div class="pr">19 €<span> / mois HT</span></div>
+        <ul><li>Devis &amp; factures Factur-X</li><li>Conformité e-facture 2026</li><li>Suivi des paiements</li><li>1 utilisateur</li></ul>
+      </div>
+      <div class="pl sel" data-plan="pro" onclick="pickPlan('pro')">
+        <div class="tag">Le plus choisi</div>
+        <div class="check">✓</div>
+        <div class="nm">Pro</div>
+        <div class="pr">49 €<span> / mois HT</span></div>
+        <ul><li>Tout Starter, plus :</li><li>Relances d'impayés IA</li><li>Portail de prise de RDV</li><li>Avis Google automatiques</li><li>Multi-utilisateurs</li></ul>
+      </div>
+      <div class="pl" data-plan="ia" onclick="pickPlan('ia')">
+        <div class="check">✓</div>
+        <div class="nm">IA / Standard</div>
+        <div class="pr">99 €<span> / mois HT</span></div>
+        <ul><li>Tout Pro, plus :</li><li>Réceptionniste IA téléphonique</li><li>Optimisation de tournées</li><li>Support prioritaire</li></ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="box" style="max-width:380px;margin:0 auto">
+    <div class="logo"><span class="mark">A</span> Artéo</div>
+    <div class="sub" id="sub">Connectez-vous à votre espace artisan</div>
+    <div class="biz" id="bizField"><label>Nom de l'entreprise</label><input id="businessName" placeholder="Plomberie Martin" /></div>
+    <label>Email</label><input id="email" type="email" placeholder="vous@entreprise.fr" />
+    <label>Mot de passe</label><input id="password" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitForm()" />
+    <button class="btn btn-primary btn-block" id="btn" style="margin-top:18px" onclick="submitForm()">Se connecter</button>
+    <div class="err" id="err"></div>
+    <div class="toggle" id="toggle">Pas encore de compte ? <a onclick="setMode('signup')">Créer un compte</a></div>
+  </div>
 </div>
 <script>
 let mode = location.pathname === '/signup' ? 'signup' : 'login';
+let plan = 'pro';
+function pickPlan(p){
+  plan = p;
+  document.querySelectorAll('.pl').forEach(el => el.classList.toggle('sel', el.dataset.plan === p));
+}
 function setMode(m){
   mode = m;
-  document.getElementById('bizField').style.display = m==='signup' ? 'block' : 'none';
-  document.getElementById('btn').textContent = m==='signup' ? 'Créer mon compte' : 'Se connecter';
-  document.getElementById('sub').textContent = m==='signup' ? 'Créez votre espace artisan gratuit' : 'Connectez-vous à votre espace artisan';
-  document.getElementById('toggle').innerHTML = m==='signup'
+  const signup = m === 'signup';
+  document.getElementById('wrap').classList.toggle('signup', signup);
+  document.getElementById('bizField').style.display = signup ? 'block' : 'none';
+  document.getElementById('trial').style.display = signup ? 'block' : 'none';
+  document.getElementById('plansWrap').style.display = signup ? 'block' : 'none';
+  document.getElementById('btn').textContent = signup ? 'Créer mon compte — essai gratuit' : 'Se connecter';
+  document.getElementById('sub').textContent = signup ? 'Créez votre espace artisan' : 'Connectez-vous à votre espace artisan';
+  document.getElementById('toggle').innerHTML = signup
     ? 'Déjà un compte ? <a onclick="setMode(\'login\')">Se connecter</a>'
     : 'Pas encore de compte ? <a onclick="setMode(\'signup\')">Créer un compte</a>';
 }
 async function submitForm(){
   document.getElementById('err').textContent='';
-  const body = { email:email.value, password:password.value, businessName:businessName.value };
+  const body = { email:email.value, password:password.value, businessName:businessName.value, plan };
   const r = await fetch(mode==='signup'?'/api/auth/signup':'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const d = await r.json();
   if(d.error){ document.getElementById('err').textContent = d.error; return; }
