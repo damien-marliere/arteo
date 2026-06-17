@@ -19,7 +19,12 @@ export interface Account {
   createdAt: string;
   smtp?: SmtpConfig;                              // mot de passe d'application (SMTP)
   gmailOAuth?: { email: string; refreshToken: string }; // « Se connecter avec Google »
+  plan?: PlanId;                                  // formule choisie (starter / pro / ia)
+  trialEndsAt?: string;                           // fin de l'essai gratuit 7 jours (facturation)
 }
+export type PlanId = "starter" | "pro" | "ia";
+const PLAN_IDS: PlanId[] = ["starter", "pro", "ia"];
+const TRIAL_DAYS = 7;
 interface Session {
   token: string;
   accountId: string;
@@ -32,7 +37,7 @@ const sessions = new Map<string, Session>();    // clé = token
 const id = () => randomBytes(8).toString("hex");
 const token = () => randomBytes(24).toString("hex");
 
-export function signup(email: string, password: string, businessName: string): Account {
+export function signup(email: string, password: string, businessName: string, plan?: string): Account {
   const key = email.trim().toLowerCase();
   if (!key || !password) throw new Error("Email et mot de passe requis.");
   if (accounts.has(key)) throw new Error("Un compte existe déjà avec cet email.");
@@ -43,9 +48,34 @@ export function signup(email: string, password: string, businessName: string): A
     passwordHash: bcrypt.hashSync(password, 10),
     businessName: businessName?.trim() || "Mon entreprise",
     createdAt: new Date().toISOString(),
+    plan: PLAN_IDS.includes(plan as PlanId) ? (plan as PlanId) : "starter",
+    // Essai gratuit 7 jours sur la facturation, sans carte bancaire.
+    trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000).toISOString(),
   };
   accounts.set(key, account);
   return account;
+}
+
+// Formule choisie par le compte (changement depuis le back-office).
+export function setPlan(accountId: string, plan: string): PlanId {
+  const a = getAccount(accountId);
+  if (!a) throw new Error("Compte introuvable.");
+  if (!PLAN_IDS.includes(plan as PlanId)) throw new Error("Formule inconnue.");
+  a.plan = plan as PlanId;
+  return a.plan;
+}
+// État de l'abonnement + essai gratuit (jours restants).
+export function getSubscription(accountId: string) {
+  const a = getAccount(accountId);
+  if (!a) return null;
+  const msLeft = a.trialEndsAt ? new Date(a.trialEndsAt).getTime() - Date.now() : 0;
+  const trialDaysLeft = Math.max(0, Math.ceil(msLeft / (24 * 60 * 60 * 1000)));
+  return {
+    plan: a.plan ?? "starter",
+    trialEndsAt: a.trialEndsAt ?? null,
+    trialDaysLeft,
+    trialActive: trialDaysLeft > 0,
+  };
 }
 
 export function login(email: string, password: string): string {
