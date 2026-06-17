@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Artéo — Relances impayés</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/assets/app.css" />
+<style>
+  .msg { background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px; margin-top:10px; }
+  .msg h4 { margin:0 0 6px; font-size:13px; }
+  .msg pre { white-space:pre-wrap; font-family:inherit; font-size:13px; margin:0; color:#334155; }
+  .pill { font-size:10px; padding:2px 7px; border-radius:6px; background:var(--brand-soft); color:var(--brand-dark); margin-left:6px; }
+  .bar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:16px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <a class="logo" href="/app"><span class="mark">A</span> Artéo</a>
+    <a class="nav-link" href="/app"><span class="i">📊</span> Tableau de bord</a>
+    <a class="nav-link" href="/app/invoices"><span class="i">➕</span> Nouvelle facture</a>
+    <a class="nav-link" href="/app/factures"><span class="i">🧾</span> Mes factures</a>
+    <a class="nav-link" href="/app/quotes"><span class="i">📝</span> Devis</a>
+    <a class="nav-link active" href="/app/dunning"><span class="i">⏰</span> Relances</a>
+    <a class="nav-link" href="/book" target="_blank"><span class="i">📅</span> Portail RDV</a>
+    <a class="nav-link" href="/receptionist" target="_blank"><span class="i">📞</span> Réceptionniste IA</a>
+    <a class="nav-link" href="/app/settings"><span class="i">⚙️</span> Réglages email</a>
+    <div class="spacer"></div>
+    <div class="foot"><a href="/app">← Retour</a></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar"><h1>Relances impayés — Agent IA</h1></div>
+    <div class="card">
+      <div class="bar">
+        <label style="margin:0">Date d'évaluation</label>
+        <input type="date" id="asOf" value="2026-06-16" style="width:auto" />
+        <button class="btn btn-ghost" onclick="seed()">Charger la démo</button>
+        <button class="btn btn-ghost" onclick="refresh()">Rafraîchir</button>
+        <button class="btn btn-primary" onclick="run()">▶ Exécuter les relances</button>
+      </div>
+      <table>
+        <thead><tr>
+          <th>Facture</th><th>Client</th><th>Échéance</th><th class="right">Reste dû</th>
+          <th class="right">Retard</th><th>Étape</th><th class="right">Pénalités</th><th class="right">Total réclamé</th><th></th>
+        </tr></thead>
+        <tbody id="rows"><tr><td colspan="9" style="color:var(--muted)">Cliquez « Charger la démo » puis « Exécuter les relances ».</td></tr></tbody>
+      </table>
+    </div>
+    <div id="messages"></div>
+  </main>
+</div>
+<script>
+const eur = n => new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(n);
+const asOf = () => document.getElementById('asOf').value;
+async function seed(){ await fetch('/api/dunning/seed',{method:'POST'}); refresh(); }
+async function refresh(){
+  const rows = await (await fetch('/api/dunning/list?asOf='+asOf())).json();
+  document.getElementById('rows').innerHTML = rows.map(x=>`
+    <tr>
+      <td><strong>${x.invoiceNumber}</strong></td><td>${x.buyer}</td><td>${x.dueDate||''}</td>
+      <td class="right">${eur(x.outstanding)}</td><td class="right">${x.daysLate>0?x.daysLate+' j':'—'}</td>
+      <td><span class="badge ${badge(x)}">${x.status==='paid'?'payée':x.stage}</span></td>
+      <td class="right">${x.latePenalty>0?eur(x.latePenalty):'—'}</td><td class="right">${eur(x.totalClaim)}</td>
+      <td>${x.status!=='paid'?`<button class="btn btn-ghost" style="padding:5px 10px;font-size:12px" onclick="pay('${x.invoiceNumber}',${x.outstanding})">Marquer payée</button>`:''}</td>
+    </tr>`).join('');
+}
+function badge(x){ if(x.status==='paid')return 'green'; if(x.stage==='formal_notice')return 'red'; if(x.stage==='none')return 'grey'; return 'amber'; }
+async function run(){
+  const { actions } = await (await fetch('/api/dunning/run',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({asOf:asOf()})})).json();
+  document.getElementById('messages').innerHTML =
+    '<h2 style="margin:24px 0 8px;font-size:14px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Relances envoyées ('+actions.length+')</h2>' +
+    actions.map(a=>`<div class="msg"><h4>${a.invoiceNumber} → ${a.buyer}
+      <span class="pill">${a.stage}</span><span class="pill">${a.channel}</span><span class="pill">${a.generatedBy==='ai'?'IA':'modèle'}</span></h4>
+      ${a.subject?`<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Objet : ${a.subject}</div>`:''}
+      <pre>${a.body.replace(/</g,'&lt;')}</pre></div>`).join('') ||
+    '<p style="color:var(--muted)">Aucune relance due à cette date.</p>';
+  refresh();
+}
+async function pay(num, amount){
+  await fetch('/api/dunning/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({invoiceNumber:num,amount,date:asOf()})});
+  refresh();
+}
+</script>
+</body>
+</html>

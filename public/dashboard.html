@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Artéo — Tableau de bord</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <a class="logo" href="/app"><span class="mark">A</span> Artéo</a>
+    <a class="nav-link active" href="/app"><span class="i">📊</span> Tableau de bord</a>
+    <a class="nav-link" href="/app/invoices"><span class="i">➕</span> Nouvelle facture</a>
+    <a class="nav-link" href="/app/factures"><span class="i">🧾</span> Mes factures</a>
+    <a class="nav-link" href="/app/quotes"><span class="i">📝</span> Devis</a>
+    <a class="nav-link" href="/app/dunning"><span class="i">⏰</span> Relances</a>
+    <a class="nav-link" href="/book" target="_blank"><span class="i">📅</span> Portail RDV</a>
+    <a class="nav-link" href="/receptionist" target="_blank"><span class="i">📞</span> Réceptionniste IA</a>
+    <a class="nav-link" href="/app/settings"><span class="i">⚙️</span> Réglages email</a>
+    <div class="spacer"></div>
+    <div class="foot"><span id="who"></span><br><a onclick="logout()">Déconnexion</a></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <h1>Tableau de bord</h1>
+      <div class="right"><span id="llm"></span></div>
+    </div>
+
+    <div class="kpis" id="kpis"></div>
+
+    <div class="card">
+      <h2>Vos modules</h2>
+      <div class="features" style="padding:0;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+        <a class="feature" href="/app/invoices"><div class="ico">🧾</div><h3>Facturation électronique</h3><p>Créer des factures Factur-X conformes 2026.</p></a>
+        <a class="feature" href="/app/dunning"><div class="ico">⏰</div><h3>Relances impayés (IA)</h3><p>Relancer automatiquement, calculer les pénalités.</p></a>
+        <a class="feature" href="/book" target="_blank"><div class="ico">📅</div><h3>Portail de RDV</h3><p>Page de réservation client (vue publique).</p></a>
+        <a class="feature" href="/receptionist" target="_blank"><div class="ico">📞</div><h3>Réceptionniste IA</h3><p>Simulation d'appel téléphonique.</p></a>
+      </div>
+    </div>
+  </main>
+</div>
+<script>
+async function init(){
+  const me = await fetch('/api/me');
+  if(me.status===401){ location.href='/login'; return; }
+  const m = await me.json();
+  document.getElementById('who').textContent = m.businessName;
+
+  const llm = await (await fetch('/api/llm/status')).json();
+  document.getElementById('llm').innerHTML = llm.enabled
+    ? `<span style="color:var(--accent)">● IA : ${llm.provider}</span>`
+    : `<span style="color:#94a3b8">○ IA : mode déterministe</span>`;
+
+  const d = await (await fetch('/api/dashboard')).json();
+  const eur = n => new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(n||0);
+  document.getElementById('kpis').innerHTML = `
+    <div class="kpi"><div class="v">${d.invoices.total}</div><div class="l">Factures émises</div></div>
+    <div class="kpi"><div class="v red">${d.invoices.unpaid}</div><div class="l">Factures impayées</div></div>
+    <div class="kpi"><div class="v">${eur(d.invoices.outstanding)}</div><div class="l">Encours à recouvrer</div></div>
+    <div class="kpi"><div class="v">${d.appointments.upcoming}</div><div class="l">RDV à venir</div></div>
+    <div class="kpi"><div class="v green">${d.reviews.sent}</div><div class="l">Avis demandés</div></div>`;
+}
+async function logout(){ await fetch('/api/auth/logout',{method:'POST'}); location.href='/'; }
+init();
+</script>
+</body>
+</html>

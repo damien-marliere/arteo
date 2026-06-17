@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Artéo — Connexion</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/assets/app.css" />
+<style>
+  body { display:flex; min-height:100vh; align-items:center; justify-content:center;
+         background: radial-gradient(900px 500px at 50% -10%, #ede9fe, var(--bg)); }
+  .box { background:#fff; border:1px solid var(--line); border-radius:18px; padding:32px; width:380px; box-shadow:var(--shadow-lg); }
+  .box .logo { justify-content:center; margin-bottom:6px; }
+  .sub { color:var(--muted); font-size:14px; text-align:center; margin-bottom:22px; }
+  .toggle { text-align:center; margin-top:16px; font-size:14px; color:var(--muted); }
+  .toggle a { color:var(--brand); cursor:pointer; font-weight:600; }
+  .err { color:var(--red); font-size:13px; margin-top:10px; min-height:18px; text-align:center; }
+  .biz { display:none; }
+  .home { position:fixed; top:20px; left:24px; }
+</style>
+</head>
+<body>
+<a class="home logo" href="/"><span class="mark">A</span> Artéo</a>
+<div class="box">
+  <div class="logo"><span class="mark">A</span> Artéo</div>
+  <div class="sub" id="sub">Connectez-vous à votre espace artisan</div>
+  <div class="biz" id="bizField"><label>Nom de l'entreprise</label><input id="businessName" placeholder="Plomberie Martin" /></div>
+  <label>Email</label><input id="email" type="email" placeholder="vous@entreprise.fr" />
+  <label>Mot de passe</label><input id="password" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')submitForm()" />
+  <button class="btn btn-primary btn-block" id="btn" style="margin-top:18px" onclick="submitForm()">Se connecter</button>
+  <div class="err" id="err"></div>
+  <div class="toggle" id="toggle">Pas encore de compte ? <a onclick="setMode('signup')">Créer un compte</a></div>
+</div>
+<script>
+let mode = location.pathname === '/signup' ? 'signup' : 'login';
+function setMode(m){
+  mode = m;
+  document.getElementById('bizField').style.display = m==='signup' ? 'block' : 'none';
+  document.getElementById('btn').textContent = m==='signup' ? 'Créer mon compte' : 'Se connecter';
+  document.getElementById('sub').textContent = m==='signup' ? 'Créez votre espace artisan gratuit' : 'Connectez-vous à votre espace artisan';
+  document.getElementById('toggle').innerHTML = m==='signup'
+    ? 'Déjà un compte ? <a onclick="setMode(\'login\')">Se connecter</a>'
+    : 'Pas encore de compte ? <a onclick="setMode(\'signup\')">Créer un compte</a>';
+}
+async function submitForm(){
+  document.getElementById('err').textContent='';
+  const body = { email:email.value, password:password.value, businessName:businessName.value };
+  const r = await fetch(mode==='signup'?'/api/auth/signup':'/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const d = await r.json();
+  if(d.error){ document.getElementById('err').textContent = d.error; return; }
+  location.href = '/app';
+}
+setMode(mode);
+</script>
+</body>
+</html>

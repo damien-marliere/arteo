@@ -1,0 +1,29 @@
+{
+  "name": "efacture",
+  "version": "0.1.0",
+  "description": "Module de facturation electronique - generateur Factur-X (PDF/A-3 + XML CII EN16931) conforme reforme 2026-2027",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "sample": "tsx src/sample.ts",
+    "dunning": "tsx src/dunning-demo.ts",
+    "services": "tsx src/services-demo.ts",
+    "llm": "tsx src/llm-demo.ts"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.6",
+    "express": "^4.19.2",
+    "nodemailer": "^6.9.14",
+    "pdf-lib": "^1.17.1",
+    "xmlbuilder2": "^3.1.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.7",
+    "@types/express": "^4.17.21",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4"
+  }
+}

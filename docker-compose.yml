@@ -1,0 +1,19 @@
+# Auto-hébergement sur un serveur (VPS) avec Docker installé.
+# Démarrer :  docker compose up -d
+# Mettre à jour :  git pull && docker compose up -d --build
+services:
+  arteo:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - DB_PATH=/data/db.json
+      # - GOOGLE_CLIENT_ID=...
+      # - GOOGLE_CLIENT_SECRET=...
+      # - GOOGLE_REDIRECT_URL=https://votre-domaine.fr/api/oauth/google/callback
+    volumes:
+      - arteo-data:/data
+    restart: unless-stopped
+volumes:
+  arteo-data:

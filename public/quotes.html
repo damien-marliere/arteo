@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Artéo — Devis</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/assets/app.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <a class="logo" href="/app"><span class="mark">A</span> Artéo</a>
+    <a class="nav-link" href="/app"><span class="i">📊</span> Tableau de bord</a>
+    <a class="nav-link" href="/app/invoices"><span class="i">➕</span> Nouvelle facture</a>
+    <a class="nav-link" href="/app/factures"><span class="i">🧾</span> Mes factures</a>
+    <a class="nav-link active" href="/app/quotes"><span class="i">📝</span> Devis</a>
+    <a class="nav-link" href="/app/dunning"><span class="i">⏰</span> Relances</a>
+    <a class="nav-link" href="/book" target="_blank"><span class="i">📅</span> Portail RDV</a>
+    <a class="nav-link" href="/receptionist" target="_blank"><span class="i">📞</span> Réceptionniste IA</a>
+    <a class="nav-link" href="/app/settings"><span class="i">⚙️</span> Réglages email</a>
+    <div class="spacer"></div>
+    <div class="foot"><a href="/app">← Retour</a></div>
+  </aside>
+  <main class="main">
+    <div class="topbar"><h1>Devis</h1><div class="right"><a class="btn btn-primary" href="/app/invoices">+ Créer un devis</a></div></div>
+    <div class="card">
+      <p style="color:var(--muted);margin:0 0 12px;font-size:14px">Créez un devis depuis « Factures » (choisissez le type <b>Devis</b> puis « Enregistrer le devis »). Une fois accepté, transformez-le en facture en un clic — elle rejoint le suivi des paiements et des relances.</p>
+      <table><thead><tr><th>N°</th><th>Client</th><th>Date</th><th class="right">TTC</th><th>Statut</th><th></th></tr></thead><tbody id="rows"></tbody></table>
+    </div>
+  </main>
+</div>
+<script>
+const eur = n => new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(n||0);
+async function load(){
+  if((await fetch('/api/me')).status===401){ location.href='/login'; return; }
+  const rows = await (await fetch('/api/quotes')).json();
+  document.getElementById('rows').innerHTML = rows.length ? rows.map(q=>`
+    <tr>
+      <td><strong>${q.id}</strong></td><td>${q.client||''}</td><td>${q.date||''}</td>
+      <td class="right">${eur(q.ttc)}</td>
+      <td><span class="badge ${q.status==='accepté'?'green':q.status==='facturé'?'grey':'amber'}">${q.status}${q.convertedInvoiceNumber?' ('+q.convertedInvoiceNumber+')':''}</span></td>
+      <td style="display:flex;gap:6px">
+        <a class="btn btn-ghost" style="padding:5px 9px;font-size:12px" href="/api/quotes/${q.id}/pdf">PDF</a>
+        <button class="btn btn-ghost" style="padding:5px 9px;font-size:12px" onclick="sendQ('${q.id}')">✉ Email</button>
+        ${q.status==='envoyé'?`<button class="btn btn-ghost" style="padding:5px 9px;font-size:12px" onclick="accept('${q.id}')">Marquer accepté</button>`:''}
+        ${q.status!=='facturé'?`<button class="btn btn-primary" style="padding:5px 9px;font-size:12px" onclick="convert('${q.id}')">→ Facture</button>`:''}
+      </td>
+    </tr>`).join('') : '<tr><td colspan="6" style="color:var(--muted)">Aucun devis pour le moment.</td></tr>';
+}
+async function accept(id){ await fetch('/api/quotes/'+id+'/accept',{method:'POST'}); load(); }
+async function sendQ(id){ const r=await (await fetch('/api/quotes/'+id+'/send',{method:'POST'})).json(); alert(r.error? r.error : 'Devis envoyé par email'+(r.simulated?' (simulation — configurez SMTP)':'')+'.'); }
+async function convert(id){
+  const d = await (await fetch('/api/quotes/'+id+'/convert',{method:'POST'})).json();
+  if(d.error){ alert(d.error); return; }
+  alert('Devis transformé en facture '+d.invoiceNumber+'. Elle est dans « Factures / Relances ».');
+  load();
+}
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Artéo — Facturation électronique</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/assets/app.css" />
+<style>
+  .lines-tbl td { padding: 4px; } .lines-tbl input { padding: 7px 9px; }
+  .qty { width: 70px; } .price { width: 110px; } .rate { width: 72px; }
+  .del { color: var(--red); background: none; border: none; cursor: pointer; font-size: 18px; }
+  .totals { text-align: right; font-size: 15px; line-height: 1.8; }
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 16px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <a class="logo" href="/app"><span class="mark">A</span> Artéo</a>
+    <a class="nav-link" href="/app"><span class="i">📊</span> Tableau de bord</a>
+    <a class="nav-link active" href="/app/invoices"><span class="i">➕</span> Nouvelle facture</a>
+    <a class="nav-link" href="/app/factures"><span class="i">🧾</span> Mes factures</a>
+    <a class="nav-link" href="/app/quotes"><span class="i">📝</span> Devis</a>
+    <a class="nav-link" href="/app/dunning"><span class="i">⏰</span> Relances</a>
+    <a class="nav-link" href="/book" target="_blank"><span class="i">📅</span> Portail RDV</a>
+    <a class="nav-link" href="/receptionist" target="_blank"><span class="i">📞</span> Réceptionniste IA</a>
+    <a class="nav-link" href="/app/settings"><span class="i">⚙️</span> Réglages email</a>
+    <div class="spacer"></div>
+    <div class="foot"><a href="/app">← Retour</a></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar"><h1>Nouvelle facture électronique</h1>
+      <div class="right">Factur-X · EN 16931 · conforme 2026</div></div>
+
+    <div class="card">
+      <h2>Document, métier &amp; TVA</h2>
+      <div class="grid2">
+        <div><label>Type de document</label><select id="docType" onchange="updateVatBox()">
+          <option value="facture">Facture</option><option value="devis">Devis</option></select></div>
+        <div><label>Métier (adapte les mentions)</label><select id="profession" onchange="updateVatBox()">
+          <option value="commerce">Commerçant / Artisan</option>
+          <option value="batiment">Bâtiment / BTP</option>
+          <option value="micro">Auto-entrepreneur / micro</option>
+          <option value="liberal">Profession libérale</option>
+          <option value="immobilier">Immobilier / Agence</option>
+        </select></div>
+      </div>
+      <div id="vatBox" style="display:none;margin-top:10px;padding:10px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:13px">
+        <label style="display:inline-flex;align-items:center;gap:8px;margin:0;font-weight:600"><input type="checkbox" id="vatActive" style="width:auto;margin:0"> Je facture la TVA (seuils de franchise dépassés)</label>
+        <div style="color:var(--muted);margin-top:4px">Par défaut : TVA non applicable (art. 293 B du CGI).</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Numéro &amp; dates</h2>
+      <div class="grid2">
+        <div><label>Numéro</label><input id="invoiceNumber" value="2026-0001" /></div>
+        <div><label>Devise</label><input id="currency" value="EUR" /></div>
+        <div><label>Date d'émission</label><input id="issueDate" type="date" value="2026-09-15" /></div>
+        <div><label>Échéance</label><input id="dueDate" type="date" value="2026-10-15" /></div>
+        <div><label>Validité (devis)</label><input id="validity" type="date" value="2026-10-15" /></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Émetteur (vendeur)</h2>
+      <div class="grid2">
+        <div><label>Raison sociale</label><input id="s_name" value="Plomberie Martin SARL" /></div>
+        <div><label>SIRET</label><input id="s_siret" value="81234567800019" /></div>
+        <div><label>N° TVA</label><input id="s_vat" value="FR40812345678" /></div>
+        <div><label>Adresse</label><input id="s_line1" value="12 rue des Lilas" /></div>
+        <div><label>Code postal</label><input id="s_cp" value="69003" /></div>
+        <div><label>Ville</label><input id="s_city" value="Lyon" /></div>
+        <div><label>RCS</label><input id="s_rcs" value="RCS Lyon 812 345 678" /></div>
+        <div><label>Téléphone</label><input id="s_phone" value="04 78 00 00 00" /></div>
+        <div><label>Email</label><input id="s_email" value="contact@mon-entreprise.fr" /></div>
+        <div><label>Site web</label><input id="s_web" value="www.mon-entreprise.fr" /></div>
+        <div><label>IBAN</label><input id="s_iban" value="FR76 3000 4000 0100 0000 0000 123" /></div>
+        <div><label>BIC</label><input id="s_bic" value="BNPAFRPPXXX" /></div>
+        <div><label>Assurance pro / décennale</label><input id="s_ins" value="AXA n° 123456 — France" /></div>
+        <div><label>RGE / Qualibat (bâtiment)</label><input id="s_rge" value="" /></div>
+        <div style="grid-column:1/-1"><label>Logo (optionnel)</label>
+          <input type="file" accept="image/png,image/jpeg" onchange="loadLogo(this)" />
+          <span id="logoState" style="font-size:12px;color:var(--muted);margin-left:8px"></span>
+          <button type="button" class="btn btn-ghost" style="padding:4px 10px;font-size:12px;margin-left:8px" onclick="clearLogo()">Retirer</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Client (acheteur)</h2>
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button type="button" id="btnPro" class="btn btn-primary" onclick="setClientType('pro')">🏢 Professionnel</button>
+        <button type="button" id="btnPart" class="btn btn-ghost" onclick="setClientType('particulier')">👤 Particulier</button>
+      </div>
+      <div class="grid2">
+        <div style="position:relative;grid-column:1/-1"><label id="lblName">Raison sociale <span style="color:var(--muted)">— tapez le nom ou le SIRET d'une entreprise, l'adresse se remplit toute seule</span></label>
+          <input id="b_name" autocomplete="off" value="Cabinet Dupont SCI" oninput="onClientInput()" onblur="setTimeout(hideDrop,200)" />
+          <div id="cdrop" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:30;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow-lg);max-height:280px;overflow:auto"></div>
+        </div>
+        <div id="wrap_siret"><label>SIRET</label><input id="b_siret" value="52345678900025" /></div>
+        <div id="wrap_vat"><label>N° TVA</label><input id="b_vat" value="FR55523456789" /></div>
+        <div><label>Adresse</label><input id="b_line1" value="8 avenue de la République" /></div>
+        <div><label>Code postal</label><input id="b_cp" value="69002" /></div>
+        <div><label>Ville</label><input id="b_city" value="Lyon" /></div>
+        <div style="grid-column:1/-1"><label>Email du client (pour l'envoi et les relances auto)</label><input id="b_email" value="client@exemple.fr" /></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Lignes</h2>
+      <table class="lines-tbl">
+        <thead><tr><th>Désignation</th><th>Qté</th><th>PU HT</th><th>TVA %</th><th></th></tr></thead>
+        <tbody id="lines"></tbody>
+      </table>
+      <div style="margin-top:10px"><button class="btn btn-ghost" onclick="addLine()">+ Ajouter une ligne</button></div>
+    </div>
+
+    <div class="card">
+      <h2>Remise</h2>
+      <div class="grid2">
+        <div><label>Type</label><select id="discType"><option value="none">Aucune</option><option value="percent">Pourcentage (%)</option><option value="amount">Montant (€)</option></select></div>
+        <div><label>Valeur</label><input id="discVal" type="number" value="0" /></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Échéancier de paiement (acomptes)</h2>
+      <select id="schedPreset">
+        <option value="comptant">Comptant (100 % à réception)</option>
+        <option value="btp1">BTP 30 / 40 / 30 (commande / mi-chantier / solde)</option>
+        <option value="btp2">BTP 40 / 30 / 30</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <div class="totals" id="totals"><span style="color:var(--muted)">Cliquez « Calculer » pour voir les totaux.</span></div>
+      <div id="invWarn" style="margin-top:10px"></div>
+      <div class="actions">
+        <button class="btn btn-ghost" onclick="preview()">Calculer les totaux</button>
+        <button class="btn btn-primary" onclick="download('pdf')">Télécharger le Factur-X (PDF)</button>
+        <button class="btn btn-ghost" onclick="emit()">Émettre la facture</button>
+        <button class="btn btn-ghost" onclick="saveQuoteServer()">Enregistrer le devis</button>
+        <button class="btn btn-ghost" onclick="sendDocEmail()">✉ Envoyer par email</button>
+        <button class="btn btn-ghost" onclick="viewXml()">Voir le XML</button>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+const lines = [
+  { description:"Remplacement chauffe-eau 200L", quantity:1, unitPrice:850, vatRate:10 },
+  { description:"Main d'œuvre installation (h)", quantity:4, unitPrice:55, vatRate:10 },
+  { description:"Fournitures raccordement", quantity:1, unitPrice:120, vatRate:20 },
+];
+function render() {
+  document.getElementById('lines').innerHTML = lines.map((l,i)=>`
+    <tr>
+      <td><input value="${l.description.replace(/"/g,'&quot;')}" oninput="upd(${i},'description',this.value)"/></td>
+      <td><input class="qty" type="number" value="${l.quantity}" oninput="upd(${i},'quantity',+this.value)"/></td>
+      <td><input class="price" type="number" value="${l.unitPrice}" oninput="upd(${i},'unitPrice',+this.value)"/></td>
+      <td><input class="rate" type="number" value="${l.vatRate}" oninput="upd(${i},'vatRate',+this.value)"/></td>
+      <td><button class="del" onclick="rm(${i})">×</button></td>
+    </tr>`).join('');
+}
+function upd(i,k,v){ lines[i][k]=v; }
+function rm(i){ lines.splice(i,1); render(); }
+function addLine(){ lines.push({description:"",quantity:1,unitPrice:0,vatRate:20}); render(); }
+let invLogo = null;
+function loadLogo(input){ const f=input.files[0]; if(!f) return; if(f.size>3000000){ alert('Image trop lourde (max 3 Mo).'); return; }
+  const rd=new FileReader(); rd.onload=e=>{ invLogo=e.target.result; document.getElementById('logoState').textContent='✓ Logo ajouté'; }; rd.readAsDataURL(f); }
+function clearLogo(){ invLogo=null; document.getElementById('logoState').textContent=''; }
+const SCHED = { comptant:[{label:'À réception',pct:100}],
+  btp1:[{label:'Acompte à la commande',pct:30},{label:'Situation mi-chantier',pct:40},{label:'Solde à la réception',pct:30}],
+  btp2:[{label:'Acompte à la commande',pct:40},{label:'Situation mi-chantier',pct:30},{label:'Solde à la réception',pct:30}] };
+function updateVatBox(){ document.getElementById('vatBox').style.display = document.getElementById('profession').value==='micro' ? 'block' : 'none'; }
+function payload(){
+  const g = id => document.getElementById(id).value;
+  const dt = g('discType'); const dv = +g('discVal');
+  return {
+    invoiceNumber:g('invoiceNumber'), currency:g('currency'), issueDate:g('issueDate'), dueDate:g('dueDate'), logo:invLogo,
+    docType:g('docType'), profession:g('profession'), vatActive:document.getElementById('vatActive').checked,
+    validity:g('validity'),
+    discount: dt!=='none' && dv>0 ? { type:dt, value:dv } : undefined,
+    schedule: SCHED[g('schedPreset')],
+    seller:{ name:g('s_name'), siret:g('s_siret'), vatId:g('s_vat'), rcs:g('s_rcs'), phone:g('s_phone'), email:g('s_email'), website:g('s_web'), iban:g('s_iban'), bic:g('s_bic'), insurance:g('s_ins'), rge:g('s_rge'), address:{ line1:g('s_line1'), postalCode:g('s_cp'), city:g('s_city'), countryCode:'FR' } },
+    buyer:{ name:g('b_name'), siret:g('b_siret'), vatId:g('b_vat'), email:g('b_email'), address:{ line1:g('b_line1'), postalCode:g('b_cp'), city:g('b_city'), countryCode:'FR' } },
+    lines
+  };
+}
+const eur = n => new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(n);
+async function preview(){
+  const t = await (await fetch('/api/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload())})).json();
+  document.getElementById('totals').innerHTML =
+    `Total HT : ${eur(t.totalNet)}<br>`+ t.vatBreakdown.map(v=>`TVA ${v.rate}% : ${eur(v.tax)}`).join('<br>')+
+    `<br><strong style="font-size:18px">Total TTC : ${eur(t.totalGross)}</strong>`;
+}
+function validateInvoice(){
+  const p = payload(); const req = [];
+  const need = { 's_name':'votre raison sociale','s_siret':'votre SIRET','s_line1':'votre adresse','s_cp':'votre code postal','s_city':'votre ville',
+    'b_name':'le nom du client','b_line1':"l'adresse du client",'b_cp':'le code postal du client','b_city':'la ville du client',
+    'invoiceNumber':'le numéro de facture','issueDate':"la date d'émission" };
+  for (const id in need) if (!document.getElementById(id).value.trim()) req.push(need[id]);
+  if (!p.lines.length || p.lines.every(l=>!l.description || !(l.unitPrice>0))) req.push('au moins une ligne (désignation + prix)');
+  const reco = []; if(!document.getElementById('s_vat').value.trim()) reco.push('votre n° de TVA intracommunautaire');
+  const w = document.getElementById('invWarn');
+  if (req.length){ w.innerHTML='<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:12px;border-radius:10px">⚠ Informations obligatoires manquantes : '+req.join(', ')+'.<br>La facture ne serait pas valable. Complétez-les.</div>'; return false; }
+  w.innerHTML = reco.length ? '<div style="background:#fffbeb;border:1px solid #fde68a;color:#92400e;padding:10px;border-radius:10px">Conseillé : '+reco.join(', ')+'.</div>' : '';
+  return true;
+}
+async function download(){
+  if(!validateInvoice()) return;
+  const r = await fetch('/api/facturx.pdf',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload())});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = `facture-${payload().invoiceNumber}.pdf`; a.click();
+}
+async function sendDocEmail(){
+  if(!validateInvoice()) return;
+  const p = payload();
+  const w = document.getElementById('invWarn');
+  if(!p.buyer.email){ w.innerHTML='<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:12px;border-radius:10px">Renseignez l\'email du client.</div>'; return; }
+  let r;
+  if(p.docType==='devis'){
+    const s = await (await fetch('/api/quotes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign(p,{docType:'devis'}))})).json();
+    if(s.error){ w.innerHTML='<div style="color:var(--red)">'+s.error+'</div>'; return; }
+    r = await (await fetch('/api/quotes/'+s.id+'/send',{method:'POST'})).json();
+  } else {
+    r = await (await fetch('/api/invoices/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(p)})).json();
+  }
+  w.innerHTML = r.error
+    ? '<div style="color:var(--red)">'+r.error+'</div>'
+    : '<div style="color:var(--accent)">✓ '+(p.docType==='devis'?'Devis':'Facture')+' envoyé à '+p.buyer.email+(r.simulated?' (simulation — configurez SMTP pour un envoi réel)':'')+'.</div>';
+}
+async function saveQuoteServer(){
+  if(!validateInvoice()) return;
+  const body = Object.assign(payload(), { docType:'devis' });
+  const d = await (await fetch('/api/quotes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+  document.getElementById('invWarn').innerHTML = d.error
+    ? '<div style="background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;padding:12px;border-radius:10px">'+d.error+'</div>'
+    : '<div style="color:var(--accent)">✓ Devis '+d.id+' enregistré et « envoyé ». Retrouvez-le dans « Devis ».</div>';
+}
+async function emit(){
+  if(!validateInvoice()) return;
+  const d = await (await fetch('/api/invoices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload())})).json();
+  document.getElementById('totals').innerHTML = d.error
+    ? '<span style="color:var(--red)">'+d.error+'</span>'
+    : '<span style="color:var(--accent)">✓ Facture '+d.invoiceNumber+' émise et enregistrée (suivi paiement + relances activés).</span>';
+}
+async function viewXml(){
+  const xml = await (await fetch('/api/facturx.xml',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload())})).text();
+  const w = window.open('','_blank'); w.document.write('<pre>'+xml.replace(/</g,'&lt;')+'</pre>');
+}
+// Type de client : professionnel (recherche entreprise) ou particulier (saisie libre)
+let clientType = 'pro';
+function setClientType(t){
+  clientType = t;
+  document.getElementById('btnPro').className = t==='pro' ? 'btn btn-primary' : 'btn btn-ghost';
+  document.getElementById('btnPart').className = t==='particulier' ? 'btn btn-primary' : 'btn btn-ghost';
+  document.getElementById('wrap_siret').style.display = t==='pro' ? '' : 'none';
+  document.getElementById('wrap_vat').style.display = t==='pro' ? '' : 'none';
+  document.getElementById('lblName').innerHTML = t==='pro'
+    ? `Raison sociale <span style="color:var(--muted)">— tapez le nom ou le SIRET d'une entreprise, l'adresse se remplit toute seule</span>`
+    : `Nom et prénom du client`;
+  if(t==='particulier'){ document.getElementById('b_siret').value=''; document.getElementById('b_vat').value=''; hideDrop(); }
+}
+// Remplissage automatique du client : anciens clients + recherche entreprise officielle
+let CLIENTS = [], DROP = [], searchTimer = null;
+async function loadClients(){ try { CLIENTS = await (await fetch('/api/clients')).json(); } catch(e){} }
+function hideDrop(){ const d=document.getElementById('cdrop'); if(d) d.style.display='none'; }
+function onClientInput(){
+  const q = document.getElementById('b_name').value.trim();
+  const past = CLIENTS.filter(c=>(c.name||'').toLowerCase().includes(q.toLowerCase())).slice(0,4).map(c=>Object.assign({src:'client'},c));
+  renderDrop(past);
+  clearTimeout(searchTimer);
+  if(clientType==='pro' && q.length>=3){
+    searchTimer = setTimeout(async ()=>{
+      try {
+        const comp = await (await fetch('/api/company-search?q='+encodeURIComponent(q))).json();
+        renderDrop(past.concat((comp||[]).map(c=>Object.assign({src:'entreprise'},c))));
+      } catch(e){}
+    }, 350);
+  }
+}
+function renderDrop(items){
+  DROP = items; const d = document.getElementById('cdrop');
+  if(!items.length){ d.style.display='none'; return; }
+  d.innerHTML = items.map((c,i)=>`<div onmousedown="pickClient(${i})" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--line)" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='#fff'">
+    <div style="font-size:14px"><strong>${(c.name||'').replace(/</g,'&lt;')}</strong> <span style="font-size:11px;color:var(--muted)">${c.src==='entreprise'?'🔎 entreprise':'⭐ déjà client'}</span></div>
+    <div style="font-size:12px;color:var(--muted)">${[c.line1,c.postalCode,c.city].filter(Boolean).join(' ')}${c.siret?' · SIRET '+c.siret:''}</div></div>`).join('');
+  d.style.display='block';
+}
+function pickClient(i){
+  const c = DROP[i]; if(!c) return;
+  const set=(id,v)=>{ const el=document.getElementById(id); if(el && v!=null) el.value=v; };
+  set('b_name', c.name); set('b_line1', c.line1); set('b_cp', c.postalCode); set('b_city', c.city);
+  set('b_siret', c.siret); set('b_vat', c.vatId); set('b_email', c.email);
+  hideDrop();
+}
+render();
+loadClients();
+</script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Artéo — Réglages email</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/assets/app.css" />
+<style>
+  .ok { background:#dcfce7; color:#15803d; padding:10px 12px; border-radius:8px; font-size:14px; }
+  .ko { background:#fee2e2; color:#b91c1c; padding:10px 12px; border-radius:8px; font-size:14px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <a class="logo" href="/app"><span class="mark">A</span> Artéo</a>
+    <a class="nav-link" href="/app"><span class="i">📊</span> Tableau de bord</a>
+    <a class="nav-link" href="/app/invoices"><span class="i">➕</span> Nouvelle facture</a>
+    <a class="nav-link" href="/app/factures"><span class="i">🧾</span> Mes factures</a>
+    <a class="nav-link" href="/app/quotes"><span class="i">📝</span> Devis</a>
+    <a class="nav-link" href="/app/dunning"><span class="i">⏰</span> Relances</a>
+    <a class="nav-link active" href="/app/settings"><span class="i">⚙️</span> Réglages email</a>
+    <div class="spacer"></div>
+    <div class="foot"><a href="/app">← Retour</a></div>
+  </aside>
+  <main class="main">
+    <div class="topbar"><h1>Réglages email</h1><div class="right" id="status"></div></div>
+
+    <div class="card" id="googleCard" style="display:none">
+      <h2>Le plus simple : se connecter avec Google</h2>
+      <div id="googleBody"></div>
+    </div>
+
+    <div class="card">
+      <h2>Connexion par mot de passe d'application</h2>
+      <div class="grid2">
+        <div><label>Fournisseur</label><select id="provider" onchange="applyPreset()">
+          <option value="gmail">Gmail</option>
+          <option value="outlook">Outlook / Office 365</option>
+          <option value="other">Autre (SMTP)</option>
+        </select></div>
+        <div><label>Nom de l'expéditeur affiché</label><input id="from" placeholder="Mon Entreprise" /></div>
+        <div><label>Votre adresse email</label><input id="user" placeholder="vous@gmail.com" /></div>
+        <div><label>Mot de passe d'application</label><input id="pass" type="password" placeholder="xxxx xxxx xxxx xxxx" /></div>
+        <div><label>Serveur SMTP</label><input id="host" value="smtp.gmail.com" /></div>
+        <div><label>Port</label><input id="port" type="number" value="587" /></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">
+        <button class="btn btn-primary" onclick="save()">Enregistrer</button>
+        <button class="btn btn-ghost" onclick="test()">Tester la connexion</button>
+        <button class="btn btn-ghost" onclick="clearCfg()">Effacer</button>
+      </div>
+      <div id="msg" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card" id="gmailGuide">
+      <h2>Gmail : comment obtenir un « mot de passe d'application »</h2>
+      <ol style="font-size:14px;line-height:1.9;padding-left:18px;margin:0">
+        <li>Activez la <b>validation en deux étapes</b> : <a href="https://myaccount.google.com/security" target="_blank">myaccount.google.com/security</a>.</li>
+        <li>Allez sur <a href="https://myaccount.google.com/apppasswords" target="_blank">myaccount.google.com/apppasswords</a>.</li>
+        <li>Donnez un nom (ex. « Artéo ») puis <b>Créer</b>.</li>
+        <li>Copiez le code de <b>16 caractères</b>.</li>
+        <li>Collez votre adresse Gmail et ce code ci-dessus, puis <b>Enregistrer</b> et <b>Tester</b>.</li>
+      </ol>
+    </div>
+  </main>
+</div>
+<script>
+const PRESETS = { gmail:{host:'smtp.gmail.com',port:587}, outlook:{host:'smtp.office365.com',port:587}, other:{host:'',port:587} };
+function applyPreset(){ const p=PRESETS[document.getElementById('provider').value]; document.getElementById('host').value=p.host; document.getElementById('port').value=p.port;
+  document.getElementById('gmailGuide').style.display = document.getElementById('provider').value==='gmail' ? 'block' : 'none'; }
+async function load(){
+  if((await fetch('/api/me')).status===401){ location.href='/login'; return; }
+  const s = await (await fetch('/api/settings/email')).json();
+  const g = s.google || {};
+  const gc = document.getElementById('googleCard');
+  if(g.available){
+    gc.style.display='block';
+    document.getElementById('googleBody').innerHTML = g.connected
+      ? `<div class="ok">✓ Connecté avec Google : <b>${g.email}</b>. Vos emails partent depuis cette adresse.</div><div style="margin-top:10px"><button class="btn btn-ghost" onclick="disconnectGoogle()">Déconnecter</button></div>`
+      : `<p style="font-size:14px;color:var(--muted);margin:0 0 12px">Un clic, une fenêtre Google s'ouvre, vous approuvez, c'est terminé. Vous ne tapez aucun mot de passe ici.</p><a class="btn btn-primary" href="/api/oauth/google/start">Se connecter avec Google</a>`;
+  } else { gc.style.display='none'; }
+  document.getElementById('host').value=s.host||'smtp.gmail.com';
+  document.getElementById('port').value=s.port||587;
+  document.getElementById('user').value=s.user||'';
+  document.getElementById('from').value=s.from||'';
+  document.getElementById('status').innerHTML = s.configured
+    ? '<span style="color:var(--accent)">● Email configuré</span>' : '<span style="color:#94a3b8">○ Email non configuré</span>';
+}
+async function save(){
+  const body={ host:val('host'), port:+val('port'), user:val('user'), pass:val('pass'), from:val('from') };
+  const r = await (await fetch('/api/settings/email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+  document.getElementById('msg').innerHTML = r.error ? `<div class="ko">${r.error}</div>` : '<div class="ok">✓ Réglages enregistrés. Pensez à « Tester la connexion ».</div>';
+  load();
+}
+async function test(){
+  document.getElementById('msg').innerHTML = 'Test en cours…';
+  const r = await (await fetch('/api/settings/email/test',{method:'POST'})).json();
+  document.getElementById('msg').innerHTML = r.ok ? '<div class="ok">✓ Connexion réussie ! Vos emails partiront depuis votre adresse.</div>' : `<div class="ko">Échec : ${r.error || "vérifiez l'adresse et le mot de passe d'application."}</div>`;
+}
+async function clearCfg(){ await fetch('/api/settings/email/clear',{method:'POST'}); document.getElementById('pass').value=''; document.getElementById('msg').innerHTML='<div class="ok">Réglages effacés.</div>'; load(); }
+async function disconnectGoogle(){ await fetch('/api/oauth/google/disconnect',{method:'POST'}); load(); }
+const val = id => document.getElementById(id).value.trim();
+load(); applyPreset();
+</script>
+</body>
+</html>

@@ -1,0 +1,31 @@
+# Déploiement « presque automatique » sur Render.com (https://render.com)
+# 1. Pousser le dossier efacture/ sur un dépôt GitHub.
+# 2. Sur Render : New + > Blueprint > sélectionner le dépôt. Render lit ce fichier.
+# 3. Ajouter les variables Google (voir GUIDE-DEPLOIEMENT.md) si vous voulez le bouton Google.
+# 4. Déployer. Render fournit une URL https publique.
+#
+# Note : le disque persistant (/data) nécessite un plan payant (Starter, ~quelques €/mois).
+# En plan gratuit, les données repartent à zéro à chaque redéploiement.
+services:
+  - type: web
+    name: arteo
+    runtime: docker
+    plan: free               # GRATUIT pour démarrer (données non conservées). Passez à "starter" + le bloc disk ci-dessous pour conserver les données.
+    healthCheckPath: /
+    envVars:
+      - key: PORT
+        value: "3000"
+      - key: DB_PATH
+        value: /data/db.json
+      # Pour le bouton « Se connecter avec Google » (à renseigner dans l'interface Render) :
+      # - key: GOOGLE_CLIENT_ID
+      #   sync: false
+      # - key: GOOGLE_CLIENT_SECRET
+      #   sync: false
+      # - key: GOOGLE_REDIRECT_URL
+      #   sync: false
+    # Plan payant uniquement (conserve les données) — décommentez après passage en "starter" :
+    # disk:
+    #   name: arteo-data
+    #   mountPath: /data
+    #   sizeGB: 1

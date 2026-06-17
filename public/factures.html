@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Artéo — Mes factures</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/assets/app.css" />
+<style>
+  .search { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; }
+  .search input[type=search]{ flex:1; min-width:220px; }
+  .count { font-size:13px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <a class="logo" href="/app"><span class="mark">A</span> Artéo</a>
+    <a class="nav-link" href="/app"><span class="i">📊</span> Tableau de bord</a>
+    <a class="nav-link" href="/app/invoices"><span class="i">➕</span> Nouvelle facture</a>
+    <a class="nav-link active" href="/app/factures"><span class="i">🧾</span> Mes factures</a>
+    <a class="nav-link" href="/app/quotes"><span class="i">📝</span> Devis</a>
+    <a class="nav-link" href="/app/dunning"><span class="i">⏰</span> Relances</a>
+    <a class="nav-link" href="/app/settings"><span class="i">⚙️</span> Réglages email</a>
+    <div class="spacer"></div>
+    <div class="foot"><a href="/app">← Retour</a></div>
+  </aside>
+  <main class="main">
+    <div class="topbar"><h1>Mes factures</h1><div class="right"><a class="btn btn-primary" href="/app/invoices">+ Nouvelle facture</a></div></div>
+    <div class="card">
+      <div class="search">
+        <input type="search" id="q" placeholder="Rechercher : n° de facture, client, date, montant…" oninput="render()" />
+        <select id="filt" onchange="render()">
+          <option value="">Tous les statuts</option>
+          <option value="sent">Non payées</option>
+          <option value="paid">Payées</option>
+        </select>
+        <span class="count" id="count"></span>
+      </div>
+      <table>
+        <thead><tr><th>N°</th><th>Client</th><th>Date</th><th>Échéance</th><th class="right">Montant TTC</th><th class="right">Reste dû</th><th>Statut</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+<script>
+let all = [];
+const eur = n => new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(n||0);
+async function load(){
+  if((await fetch('/api/me')).status===401){ location.href='/login'; return; }
+  all = await (await fetch('/api/invoices/list')).json();
+  render();
+}
+function render(){
+  const q = document.getElementById('q').value.toLowerCase().trim();
+  const f = document.getElementById('filt').value;
+  let rows = all.filter(r=>{
+    if(f==='paid' && r.status!=='paid') return false;
+    if(f==='sent' && r.status==='paid') return false;
+    if(!q) return true;
+    const hay = [r.invoiceNumber, r.buyer, r.issueDate, r.dueDate, String(r.ttc)].join(' ').toLowerCase();
+    return hay.includes(q);
+  });
+  document.getElementById('count').textContent = rows.length + ' / ' + all.length + ' facture(s)';
+  document.getElementById('rows').innerHTML = rows.length ? rows.map(r=>`
+    <tr>
+      <td><strong>${r.invoiceNumber}</strong></td>
+      <td>${r.buyer||''}</td>
+      <td>${r.issueDate||''}</td>
+      <td>${r.dueDate||''}</td>
+      <td class="right">${eur(r.ttc)}</td>
+      <td class="right">${r.outstanding>0?eur(r.outstanding):'—'}</td>
+      <td><span class="badge ${r.status==='paid'?'green':r.status==='partially_paid'?'amber':'grey'}">${r.status==='paid'?'payée':r.status==='partially_paid'?'partielle':'à encaisser'}</span></td>
+      <td><a class="btn btn-ghost" style="padding:5px 10px;font-size:12px" href="/api/invoices/${encodeURIComponent(r.invoiceNumber)}/pdf">PDF</a></td>
+    </tr>`).join('')
+    : `<tr><td colspan="8" style="color:var(--muted)">${all.length? 'Aucune facture ne correspond à la recherche.' : "Aucune facture émise pour l'instant. Créez-en une via « Nouvelle facture »."}</td></tr>`;
+}
+load();
+</script>
+</body>
+</html>
