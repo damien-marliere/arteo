@@ -12,12 +12,12 @@ import { ConsoleTransport, EmailTransport } from "./dunning/transport.js";
 import { sendEmail, emailConfigured, verifySmtp } from "./email/index.js";
 import { list as listRecords, get as getRecord, recordPayment, outstanding, totalDue, upsert } from "./dunning/store.js";
 import { computePenalties } from "./dunning/penalties.js";
-import { book, generateSlots, listServices, listAppointments, updateAppointmentStatus } from "./booking/index.js";
+import { book, generateSlots, listServices, getService, listAppointments, updateAppointmentStatus } from "./booking/index.js";
 import { startCall, handleTurn } from "./receptionist/index.js";
 import { runReviewRequests, listReviewRequests, setReviewConfig } from "./reviews/index.js";
 import { saveQuote, listQuotes, getQuote, setStatus, quoteTotal, toInvoice, markConverted } from "./quotes/index.js";
 import { signup, login, logout, requireAuth, accountFromToken, countAccounts, firstAccountId, listAccountIds, getSmtp, setSmtp, getGmailOAuth, setGmailOAuth, setPlan, getSubscription } from "./auth/index.js";
-import { googleConfigured, authUrl, exchangeCode, userEmail } from "./oauth/google.js";
+import { googleConfigured, authUrl, exchangeCode, userEmail, createCalendarEvent } from "./oauth/google.js";
 import { load, save, saveNow } from "./persistence.js";
 import { llmStatus } from "./llm/index.js";
 
@@ -275,9 +275,31 @@ app.get("/api/booking/slots", (req, res) => {                                   
     res.json(generateSlots(publicAcc(req), String(req.query.serviceId), from, req.query.days ? Number(req.query.days) : 7));
   } catch (e: any) { res.status(400).json({ error: e.message }); }
 });
-app.post("/api/booking/book", (req, res) => {                                                 // public (client)
-  try { const a = book(publicAcc(req), req.body); saveNow(); res.json(a); }
-  catch (e: any) { res.status(400).json({ error: e.message }); }
+app.post("/api/booking/book", async (req, res) => {                                           // public (client)
+  try {
+    const accountId = publicAcc(req);
+    const a = book(accountId, req.body);
+    saveNow();
+    // Synchronisation Google Agenda : si l'artisan a connecté son compte Google,
+    // le RDV est ajouté automatiquement à son agenda (la connexion email couvre aussi l'agenda).
+    const oauth = getGmailOAuth(accountId);
+    if (oauth?.refreshToken && googleConfigured()) {
+      try {
+        const svc = getService(accountId, a.serviceId);
+        const ev = await createCalendarEvent(oauth.refreshToken, {
+          summary: `RDV ${svc?.name ?? ""} — ${a.customer.name}`.trim(),
+          description: `Client : ${a.customer.name}`
+            + (a.customer.phone ? `\nTél : ${a.customer.phone}` : "")
+            + (a.customer.email ? `\nEmail : ${a.customer.email}` : "")
+            + `\nPris via le portail Artéo.`,
+          startIso: a.start, endIso: a.end,
+          attendeeEmail: a.customer.email,
+        });
+        (a as any).calendarLink = ev.htmlLink;
+      } catch (e) { console.error("Google Agenda :", (e as Error).message); }
+    }
+    res.json(a);
+  } catch (e: any) { res.status(400).json({ error: e.message }); }
 });
 app.get("/api/booking/appointments", auth, (req, res) => res.json(listAppointments(acc(req))));
 app.post("/api/booking/complete", auth, (req, res) => {
