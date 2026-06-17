@@ -18,6 +18,7 @@
     <a class="nav-link" href="/app/dunning"><span class="i">⏰</span> Relances</a>
     <a class="nav-link" href="/book" target="_blank"><span class="i">📅</span> Portail RDV</a>
     <a class="nav-link" href="/receptionist" target="_blank"><span class="i">📞</span> Réceptionniste IA</a>
+    <a class="nav-link" href="/app/abonnement"><span class="i">💳</span> Abonnement</a>
     <a class="nav-link" href="/app/settings"><span class="i">⚙️</span> Réglages email</a>
     <div class="spacer"></div>
     <div class="foot"><span id="who"></span><br><a onclick="logout()">Déconnexion</a></div>
@@ -28,6 +29,17 @@
       <h1>Tableau de bord</h1>
       <div class="right"><span id="llm"></span></div>
     </div>
+
+    <a id="trialBanner" href="/app/abonnement" style="display:none;text-decoration:none;align-items:center;gap:14px;
+       background:linear-gradient(90deg,#ecfdf5,#eef2ff);border:1px solid #bbf7d0;border-radius:14px;
+       padding:14px 20px;margin-bottom:20px">
+      <span style="font-size:26px">🎁</span>
+      <div style="flex:1">
+        <div style="font-weight:700;color:#15803d" id="trialText"></div>
+        <div style="font-size:13px;color:var(--muted)">Choisissez votre formule — Starter, Pro ou IA.</div>
+      </div>
+      <span class="btn btn-primary" style="pointer-events:none">Choisir ma formule →</span>
+    </a>
 
     <div class="kpis" id="kpis"></div>
 
@@ -53,6 +65,15 @@ async function init(){
   document.getElementById('llm').innerHTML = llm.enabled
     ? `<span style="color:var(--accent)">● IA : ${llm.provider}</span>`
     : `<span style="color:#94a3b8">○ IA : mode déterministe</span>`;
+
+  const sub = await (await fetch('/api/subscription')).json();
+  const NAMES = { starter:'Starter', pro:'Pro', ia:'IA / Standard' };
+  const banner = document.getElementById('trialBanner');
+  if(sub && sub.trialActive){
+    banner.style.display = 'flex';
+    document.getElementById('trialText').textContent =
+      'Essai gratuit : ' + sub.trialDaysLeft + ' jour' + (sub.trialDaysLeft>1?'s':'') + ' restant' + (sub.trialDaysLeft>1?'s':'') + ' sur la facturation — formule ' + (NAMES[sub.plan]||'Starter') + '.';
+  }
 
   const d = await (await fetch('/api/dashboard')).json();
   const eur = n => new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(n||0);
