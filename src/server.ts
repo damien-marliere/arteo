@@ -16,7 +16,7 @@ import { book, generateSlots, listServices, listAppointments, updateAppointmentS
 import { startCall, handleTurn } from "./receptionist/index.js";
 import { runReviewRequests, listReviewRequests, setReviewConfig } from "./reviews/index.js";
 import { saveQuote, listQuotes, getQuote, setStatus, quoteTotal, toInvoice, markConverted } from "./quotes/index.js";
-import { signup, login, logout, requireAuth, accountFromToken, countAccounts, firstAccountId, listAccountIds, getSmtp, setSmtp, getGmailOAuth, setGmailOAuth } from "./auth/index.js";
+import { signup, login, logout, requireAuth, accountFromToken, countAccounts, firstAccountId, listAccountIds, getSmtp, setSmtp, getGmailOAuth, setGmailOAuth, setPlan, getSubscription } from "./auth/index.js";
 import { googleConfigured, authUrl, exchangeCode, userEmail } from "./oauth/google.js";
 import { load, save, saveNow } from "./persistence.js";
 import { llmStatus } from "./llm/index.js";
@@ -51,8 +51,8 @@ app.get("/signup", page("login.html"));
 
 app.post("/api/auth/signup", (req, res) => {
   try {
-    const { email, password, businessName } = req.body;
-    const account = signup(email, password, businessName);
+    const { email, password, businessName, plan } = req.body;
+    const account = signup(email, password, businessName, plan);
     setReviewConfig(account.id, { businessName: account.businessName }); // nom utilisé par l'IA et les avis
     const token = login(email, password);
     res.cookie("sid", token, { httpOnly: true, sameSite: "lax" });
@@ -86,6 +86,7 @@ app.get("/app/invoices", authPage, page("index.html"));
 app.get("/app/factures", authPage, page("factures.html"));
 app.get("/app/quotes", authPage, page("quotes.html"));
 app.get("/app/dunning", authPage, page("dunning.html"));
+app.get("/app/abonnement", authPage, page("abonnement.html"));
 
 // ============ PAGES CLIENT (publiques) ============
 app.get("/book", page("book.html"));
@@ -106,6 +107,13 @@ app.get("/api/dashboard", auth, (req, res) => {
     appointments: { total: appts.length, upcoming: appts.filter((x) => x.status === "booked" && new Date(x.start) > now).length },
     reviews: { sent: listReviewRequests(a).length },
   });
+});
+
+// ============ ABONNEMENT / FORMULES ============
+app.get("/api/subscription", auth, (req, res) => res.json(getSubscription(acc(req))));
+app.post("/api/subscription", auth, (req, res) => {
+  try { const plan = setPlan(acc(req), req.body?.plan); saveNow(); res.json({ ok: true, plan }); }
+  catch (e: any) { res.status(400).json({ error: e.message }); }
 });
 
 // ============ FACTURATION (protégé) ============
@@ -227,6 +235,28 @@ app.post("/api/dunning/run", auth, async (req, res) => {
   const actions = await runDunning(acc(req), asOf, transport);
   saveNow();
   res.json({ actions, sent: transport.sent });
+});
+// Historique de toutes les relances envoyées (tous clients), suivi par l'artisan.
+app.get("/api/dunning/history", auth, (req, res) => {
+  const a = acc(req);
+  const out: any[] = [];
+  for (const r of listRecords(a)) {
+    for (const e of r.dunning.events) {
+      out.push({
+        invoiceNumber: r.invoice.invoiceNumber,
+        buyer: r.invoice.buyer.name,
+        to: e.to,
+        date: e.date,
+        stage: e.stage,
+        channel: e.channel,
+        subject: e.subject ?? "",
+        body: e.body,
+        generatedBy: e.generatedBy,
+      });
+    }
+  }
+  out.sort((x, y) => String(y.date).localeCompare(String(x.date)));
+  res.json(out);
 });
 app.post("/api/dunning/pay", auth, (req, res) => {
   try {
