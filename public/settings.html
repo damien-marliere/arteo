@@ -29,7 +29,8 @@
     <div class="topbar"><h1>Réglages email</h1><div class="right" id="status"></div></div>
 
     <div class="card" id="googleCard" style="display:none">
-      <h2>Le plus simple : se connecter avec Google</h2>
+      <h2>Le plus simple : se connecter avec Google (emails + agenda)</h2>
+      <p style="font-size:13px;color:var(--muted);margin:0 0 12px">Un seul clic connecte votre compte Google : vos factures et relances partent depuis votre Gmail, et chaque rendez-vous pris sur votre portail s'ajoute automatiquement à votre <b>Google Agenda</b>.</p>
       <div id="googleBody"></div>
     </div>
 
@@ -79,8 +80,8 @@ async function load(){
   if(g.available){
     gc.style.display='block';
     document.getElementById('googleBody').innerHTML = g.connected
-      ? `<div class="ok">✓ Connecté avec Google : <b>${g.email}</b>. Vos emails partent depuis cette adresse.</div><div style="margin-top:10px"><button class="btn btn-ghost" onclick="disconnectGoogle()">Déconnecter</button></div>`
-      : `<p style="font-size:14px;color:var(--muted);margin:0 0 12px">Un clic, une fenêtre Google s'ouvre, vous approuvez, c'est terminé. Vous ne tapez aucun mot de passe ici.</p><a class="btn btn-primary" href="/api/oauth/google/start">Se connecter avec Google</a>`;
+      ? `<div class="ok">✓ Connecté avec Google : <b>${g.email}</b>. Vos emails partent depuis cette adresse et vos rendez-vous s'ajoutent à votre Google Agenda.</div><div style="margin-top:10px"><button class="btn btn-ghost" onclick="disconnectGoogle()">Déconnecter</button></div>`
+      : `<p style="font-size:14px;color:var(--muted);margin:0 0 12px">Un clic, une fenêtre Google s'ouvre, vous approuvez, c'est terminé (emails + agenda). Vous ne tapez aucun mot de passe ici.</p><a class="btn btn-primary" href="/api/oauth/google/start">Se connecter avec Google</a>`;
   } else { gc.style.display='none'; }
   document.getElementById('host').value=s.host||'smtp.gmail.com';
   document.getElementById('port').value=s.port||587;
