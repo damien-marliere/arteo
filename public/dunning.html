@@ -25,6 +25,7 @@
     <a class="nav-link active" href="/app/dunning"><span class="i">⏰</span> Relances</a>
     <a class="nav-link" href="/book" target="_blank"><span class="i">📅</span> Portail RDV</a>
     <a class="nav-link" href="/receptionist" target="_blank"><span class="i">📞</span> Réceptionniste IA</a>
+    <a class="nav-link" href="/app/abonnement"><span class="i">💳</span> Abonnement</a>
     <a class="nav-link" href="/app/settings"><span class="i">⚙️</span> Réglages email</a>
     <div class="spacer"></div>
     <div class="foot"><a href="/app">← Retour</a></div>
@@ -49,7 +50,33 @@
       </table>
     </div>
     <div id="messages"></div>
+
+    <div class="card" style="margin-top:24px">
+      <div class="bar" style="justify-content:space-between">
+        <h2 style="margin:0;font-size:16px">📨 Historique des relances envoyées</h2>
+        <input id="histSearch" placeholder="Rechercher (client, facture, étape…)" oninput="renderHist()" style="width:280px;max-width:100%" />
+      </div>
+      <table>
+        <thead><tr>
+          <th>Date</th><th>Facture</th><th>Client</th><th>Destinataire</th><th>Étape</th><th>Canal</th><th>Objet</th><th></th>
+        </tr></thead>
+        <tbody id="histRows"><tr><td colspan="8" style="color:var(--muted)">Aucune relance envoyée pour le moment.</td></tr></tbody>
+      </table>
+    </div>
   </main>
+</div>
+
+<div id="msgModal" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,.5);z-index:50;align-items:center;justify-content:center;padding:20px">
+  <div style="background:#fff;border-radius:16px;max-width:640px;width:100%;max-height:85vh;overflow:auto;box-shadow:var(--shadow-lg)">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:18px 22px;border-bottom:1px solid var(--line)">
+      <strong id="modalTitle"></strong>
+      <a onclick="document.getElementById('msgModal').style.display='none'" style="cursor:pointer;font-size:22px;color:var(--muted)">×</a>
+    </div>
+    <div style="padding:22px">
+      <div id="modalMeta" style="font-size:13px;color:var(--muted);margin-bottom:12px"></div>
+      <pre id="modalBody" style="white-space:pre-wrap;font-family:inherit;font-size:14px;color:#334155;margin:0"></pre>
+    </div>
+  </div>
 </div>
 <script>
 const eur = n => new Intl.NumberFormat('fr-FR',{style:'currency',currency:'EUR'}).format(n);
@@ -82,6 +109,44 @@ async function pay(num, amount){
   await fetch('/api/dunning/pay',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({invoiceNumber:num,amount,date:asOf()})});
   refresh();
 }
+
+// ---- Historique des relances envoyées ----
+const STAGE_FR = { reminder_1:'Relance 1 (J+7)', reminder_2:'Relance 2 (J+15)', formal_notice:'Mise en demeure (J+30)', none:'—' };
+let HIST = [];
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+async function loadHist(){
+  try { HIST = await (await fetch('/api/dunning/history')).json(); } catch { HIST = []; }
+  renderHist();
+}
+function renderHist(){
+  const q = (document.getElementById('histSearch').value||'').toLowerCase();
+  const rows = HIST.filter(h => !q ||
+    [h.buyer,h.invoiceNumber,h.to,h.subject,STAGE_FR[h.stage]||h.stage].join(' ').toLowerCase().includes(q));
+  const tb = document.getElementById('histRows');
+  if(!rows.length){ tb.innerHTML = '<tr><td colspan="8" style="color:var(--muted)">Aucune relance '+(q?'ne correspond à la recherche.':'envoyée pour le moment.')+'</td></tr>'; return; }
+  tb.innerHTML = rows.map((h,i)=>`<tr>
+    <td>${(h.date||'').slice(0,10)}</td>
+    <td><strong>${esc(h.invoiceNumber)}</strong></td>
+    <td>${esc(h.buyer)}</td>
+    <td style="color:var(--muted);font-size:13px">${esc(h.to)}</td>
+    <td><span class="badge ${h.stage==='formal_notice'?'red':'amber'}">${STAGE_FR[h.stage]||h.stage}</span></td>
+    <td>${h.channel==='email'?'✉️ Email':'💬 SMS'}</td>
+    <td style="font-size:13px">${esc(h.subject)}</td>
+    <td><button class="btn btn-ghost" style="padding:5px 10px;font-size:12px" onclick="viewMsg(${i})">Voir</button></td>
+  </tr>`).join('');
+  window._HISTROWS = rows;
+}
+function viewMsg(i){
+  const h = window._HISTROWS[i];
+  document.getElementById('modalTitle').textContent = (STAGE_FR[h.stage]||h.stage) + ' — ' + h.invoiceNumber;
+  document.getElementById('modalMeta').innerHTML =
+    'À : <b>'+esc(h.buyer)+'</b> &lt;'+esc(h.to)+'&gt; · '+(h.date||'').slice(0,10)+
+    ' · '+(h.generatedBy==='ai'?'rédigé par IA':'modèle')+(h.subject?'<br>Objet : <b>'+esc(h.subject)+'</b>':'');
+  document.getElementById('modalBody').textContent = h.body || '';
+  document.getElementById('msgModal').style.display = 'flex';
+}
+const _run = run; run = async function(){ await _run(); loadHist(); };
+loadHist();
 </script>
 </body>
 </html>
