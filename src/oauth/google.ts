@@ -15,6 +15,7 @@ const SCOPES = [
   "openid",
   "email",
   "https://www.googleapis.com/auth/gmail.send",
+  "https://www.googleapis.com/auth/calendar.events", // créer les RDV dans Google Agenda
 ].join(" ");
 
 export function googleConfigured(): boolean {
@@ -63,4 +64,50 @@ export async function userEmail(accessToken: string): Promise<string> {
   });
   const data: any = await res.json();
   return data.email ?? "";
+}
+
+// Obtient un nouvel access_token à partir du refresh_token stocké.
+export async function getAccessToken(refreshToken: string): Promise<string> {
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId(),
+      client_secret: clientSecret(),
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }).toString(),
+  });
+  const data: any = await res.json();
+  if (!res.ok) throw new Error(data.error_description || data.error || "Échec du rafraîchissement du jeton Google");
+  return data.access_token as string;
+}
+
+export interface CalendarEvent {
+  summary: string;
+  description?: string;
+  startIso: string;     // ISO datetime
+  endIso: string;       // ISO datetime
+  attendeeEmail?: string;
+}
+
+// Crée un événement dans l'agenda Google principal de l'utilisateur connecté.
+export async function createCalendarEvent(refreshToken: string, ev: CalendarEvent): Promise<{ id: string; htmlLink: string }> {
+  const accessToken = await getAccessToken(refreshToken);
+  const body: any = {
+    summary: ev.summary,
+    description: ev.description ?? "",
+    start: { dateTime: ev.startIso, timeZone: "Europe/Paris" },
+    end: { dateTime: ev.endIso, timeZone: "Europe/Paris" },
+    reminders: { useDefault: true },
+  };
+  if (ev.attendeeEmail) body.attendees = [{ email: ev.attendeeEmail }];
+  const res = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data: any = await res.json();
+  if (!res.ok) throw new Error(data.error?.message || "Échec de la création de l'événement Google Agenda");
+  return { id: data.id, htmlLink: data.htmlLink };
 }
