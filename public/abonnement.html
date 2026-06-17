@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Artéo — Abonnement</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/assets/app.css" />
+<style>
+  .trial { background:linear-gradient(90deg,#ecfdf5,#eef2ff); border:1px solid #bbf7d0; border-radius:14px;
+           padding:16px 20px; margin-bottom:22px; display:flex; align-items:center; gap:14px; }
+  .trial .big { font-size:30px; }
+  .trial b { color:#15803d; }
+  .current { background:var(--brand-soft); color:var(--brand-dark); border-radius:10px; padding:10px 14px;
+             font-size:14px; font-weight:600; margin-bottom:20px; display:inline-block; }
+  .pricing { padding:8px 0; }
+  .plan.sel { border:2px solid var(--brand); box-shadow:0 0 0 4px var(--brand-soft); }
+  .plan .cur { display:none; font-size:12px; font-weight:700; color:var(--brand-dark); margin-bottom:6px; }
+  .plan.sel .cur { display:block; }
+  .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#15803d; color:#fff;
+           padding:12px 22px; border-radius:10px; font-weight:600; box-shadow:var(--shadow-lg); opacity:0; transition:opacity .25s; pointer-events:none; }
+  .toast.show { opacity:1; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <a class="logo" href="/app"><span class="mark">A</span> Artéo</a>
+    <a class="nav-link" href="/app"><span class="i">📊</span> Tableau de bord</a>
+    <a class="nav-link" href="/app/invoices"><span class="i">➕</span> Nouvelle facture</a>
+    <a class="nav-link" href="/app/factures"><span class="i">🧾</span> Mes factures</a>
+    <a class="nav-link" href="/app/quotes"><span class="i">📝</span> Devis</a>
+    <a class="nav-link" href="/app/dunning"><span class="i">⏰</span> Relances</a>
+    <a class="nav-link active" href="/app/abonnement"><span class="i">💳</span> Abonnement</a>
+    <a class="nav-link" href="/app/settings"><span class="i">⚙️</span> Réglages email</a>
+    <div class="spacer"></div>
+    <div class="foot"><a href="/app">← Retour</a></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar"><h1>Mon abonnement</h1></div>
+
+    <div class="trial" id="trialBox" style="display:none">
+      <span class="big">🎁</span>
+      <div>
+        <div><b id="trialLine"></b></div>
+        <small style="color:var(--muted)">Profitez de la facturation électronique gratuitement pendant votre essai, sans carte bancaire.</small>
+      </div>
+    </div>
+
+    <div class="current" id="current"></div>
+
+    <div class="pricing">
+      <div class="plan" data-plan="starter">
+        <div class="cur">✓ Votre formule actuelle</div>
+        <h3>Starter</h3>
+        <div class="price">19 €<span> / mois HT</span></div>
+        <p style="color:var(--muted);font-size:14px">Pour démarrer proprement.</p>
+        <ul><li>Devis &amp; factures Factur-X</li><li>Conformité e-facture 2026</li><li>Suivi des paiements</li><li>1 utilisateur</li></ul>
+        <button class="btn btn-ghost btn-block" onclick="choose('starter')">Choisir Starter</button>
+      </div>
+      <div class="plan popular" data-plan="pro">
+        <div class="cur">✓ Votre formule actuelle</div>
+        <h3>Pro</h3>
+        <div class="price">49 €<span> / mois HT</span></div>
+        <p style="color:var(--muted);font-size:14px">Le préféré des artisans.</p>
+        <ul><li>Tout Starter, plus :</li><li>Relances d'impayés IA</li><li>Portail de prise de RDV</li><li>Avis Google automatiques</li><li>Multi-utilisateurs</li></ul>
+        <button class="btn btn-primary btn-block" onclick="choose('pro')">Choisir Pro</button>
+      </div>
+      <div class="plan" data-plan="ia">
+        <div class="cur">✓ Votre formule actuelle</div>
+        <h3>IA / Standard</h3>
+        <div class="price">99 €<span> / mois HT</span></div>
+        <p style="color:var(--muted);font-size:14px">Pour ne plus jamais rater un appel.</p>
+        <ul><li>Tout Pro, plus :</li><li>Réceptionniste IA téléphonique</li><li>Optimisation de tournées</li><li>Support prioritaire</li></ul>
+        <button class="btn btn-ghost btn-block" onclick="choose('ia')">Choisir IA</button>
+      </div>
+    </div>
+    <p style="color:var(--muted);font-size:13px;margin-top:6px">Pendant la phase de lancement, le changement de formule est gratuit et le paiement n'est pas encore activé.</p>
+  </main>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const NAMES = { starter:'Starter', pro:'Pro', ia:'IA / Standard' };
+async function load(){
+  if((await fetch('/api/me')).status===401){ location.href='/login'; return; }
+  const s = await (await fetch('/api/subscription')).json();
+  document.querySelectorAll('.plan').forEach(el => el.classList.toggle('sel', el.dataset.plan === s.plan));
+  document.getElementById('current').textContent = 'Formule actuelle : ' + (NAMES[s.plan] || 'Starter');
+  const tb = document.getElementById('trialBox');
+  if(s.trialActive){
+    tb.style.display = 'flex';
+    document.getElementById('trialLine').textContent =
+      'Essai gratuit en cours — ' + s.trialDaysLeft + ' jour' + (s.trialDaysLeft>1?'s':'') + ' restant' + (s.trialDaysLeft>1?'s':'') + ' sur la facturation.';
+  } else { tb.style.display = 'none'; }
+}
+async function choose(plan){
+  const r = await (await fetch('/api/subscription',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan})})).json();
+  if(r.ok){ toast('Formule ' + (NAMES[plan]||plan) + ' sélectionnée ✓'); load(); }
+}
+function toast(msg){
+  const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2500);
+}
+load();
+</script>
+</body>
+</html>
