@@ -21,6 +21,14 @@ export interface Account {
   gmailOAuth?: { email: string; refreshToken: string }; // « Se connecter avec Google »
   plan?: PlanId;                                  // formule choisie (starter / pro / ia)
   trialEndsAt?: string;                           // fin de l'essai gratuit 7 jours (facturation)
+  profile?: SellerProfile;
+}
+export interface SellerProfile {
+  name?: string; siret?: string; vatId?: string;
+  line1?: string; postalCode?: string; city?: string;
+  rcs?: string; phone?: string; email?: string; website?: string;
+  iban?: string; bic?: string; insurance?: string; rge?: string;
+  logo?: string;
 }
 export type PlanId = "starter" | "pro" | "ia";
 const PLAN_IDS: PlanId[] = ["starter", "pro", "ia"];
@@ -129,6 +137,13 @@ export function getGmailOAuth(accountId: string): { email: string; refreshToken:
 }
 
 // Middleware : exige une session valide (cookie "sid"), sinon 401 / redirection.
+export function getProfile(accountId: string): SellerProfile {
+  return getAccount(accountId)?.profile ?? {};
+}
+export function setProfile(accountId: string, profile: SellerProfile): void {
+  const a = getAccount(accountId);
+  if (a) a.profile = profile;
+}
 export function requireAuth(redirect = false) {
   return (req: Request, res: Response, next: NextFunction) => {
     const account = accountFromToken(req.cookies?.sid);
