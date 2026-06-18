@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Artéo — Mes rendez-vous</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/assets/app.css" />
+<style>
+  .cal-wrap { position:relative; border:1px solid var(--line,#e5e7eb); border-radius:12px; overflow:hidden; background:#fff; }
+  .cal-wrap iframe { width:100%; height:560px; border:0; display:block; }
+  .rdv { display:flex; align-items:center; gap:14px; padding:12px 4px; border-bottom:1px solid #f0f1f4; }
+  .rdv:last-child { border-bottom:0; }
+  .rdv .when { min-width:150px; font-weight:700; font-size:14px; }
+  .rdv .who { flex:1; }
+  .rdv .who small { color:var(--muted,#6b7280); display:block; }
+  .pill { font-size:11px; padding:3px 9px; border-radius:999px; font-weight:700; }
+  .pill.booked { background:#dbeafe; color:#1d4ed8; }
+  .pill.completed { background:#dcfce7; color:#15803d; }
+  .pill.cancelled { background:#fee2e2; color:#b91c1c; }
+  .srv-row { display:grid; grid-template-columns:1fr 110px 1fr 36px; gap:8px; align-items:center; margin-bottom:8px; }
+  .srv-row input { width:100%; }
+  .iconbtn { border:none; background:#fee2e2; color:#b91c1c; border-radius:8px; padding:7px; cursor:pointer; font-size:14px; }
+  .hint { font-size:13px; color:var(--muted,#6b7280); margin:0 0 12px; }
+  .linkbox { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .linkbox input { flex:1; min-width:240px; }
+  @media(max-width:680px){ .srv-row{ grid-template-columns:1fr 80px 36px; } .srv-row .desc{ display:none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <a class="logo" href="/app"><span class="mark">A</span> Artéo</a>
+    <a class="nav-link" href="/app"><span class="i">📊</span> Tableau de bord</a>
+    <a class="nav-link" href="/app/profil"><span class="i">🏢</span> Mon entreprise</a>
+    <a class="nav-link" href="/app/invoices"><span class="i">➕</span> Nouvelle facture</a>
+    <a class="nav-link" href="/app/factures"><span class="i">🧾</span> Mes factures</a>
+    <a class="nav-link" href="/app/quotes"><span class="i">📝</span> Devis</a>
+    <a class="nav-link" href="/app/dunning"><span class="i">⏰</span> Relances</a>
+    <a class="nav-link active" href="/app/rdv"><span class="i">📅</span> Mes RDV</a>
+    <a class="nav-link" href="/app/abonnement"><span class="i">💳</span> Abonnement</a>
+    <a class="nav-link" href="/app/settings"><span class="i">⚙️</span> Réglages email</a>
+    <div class="spacer"></div>
+    <div class="foot"><a href="/app">← Retour</a></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar"><h1>Mes rendez-vous</h1><div class="right" id="gstate"></div></div>
+
+    <div class="card">
+      <h2>Votre page de réservation</h2>
+      <p class="hint">Partagez ce lien à vos clients (site, Google, carte de visite, SMS) : ils réservent un créneau en ligne, 24h/24.</p>
+      <div class="linkbox">
+        <input id="bookLink" readonly />
+        <button class="btn btn-primary" onclick="copyLink()">📋 Copier</button>
+        <a id="openBook" class="btn btn-ghost" target="_blank">Ouvrir</a>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Mon agenda</h2>
+      <div id="agenda"></div>
+    </div>
+
+    <div class="card">
+      <h2>Tous mes rendez-vous</h2>
+      <div id="list"><p class="hint">Chargement…</p></div>
+    </div>
+
+    <div class="card">
+      <h2>Mes prestations</h2>
+      <p class="hint">Définissez les prestations que vos clients peuvent réserver — valable pour tout métier (agent immobilier, coiffeur, peintre, plombier…). Indiquez un nom, une durée (en minutes) et une courte description.</p>
+      <div id="srvRows"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px;align-items:center">
+        <button class="btn btn-ghost" onclick="addRow()">+ Ajouter une prestation</button>
+        <button class="btn btn-primary" onclick="saveServices()">Enregistrer mes prestations</button>
+        <span id="srvMsg" style="font-size:13px"></span>
+      </div>
+    </div>
+  </main>
+</div>
+<script>
+const fmt = iso => new Date(iso).toLocaleString('fr-FR',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'UTC'});
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let me = null;
+
+async function init(){
+  const r = await fetch('/api/me');
+  if(r.status===401){ location.href='/login'; return; }
+  me = await r.json();
+  const link = location.origin + '/book?account=' + me.id;
+  document.getElementById('bookLink').value = link;
+  document.getElementById('openBook').href = link;
+
+  const em = await (await fetch('/api/settings/email')).json();
+  const g = em.google || {};
+  const gstate = document.getElementById('gstate');
+  const agenda = document.getElementById('agenda');
+  if(g.connected && g.email){
+    gstate.innerHTML = '<span style="color:var(--accent)">● Google Agenda connecté</span>';
+    const src = encodeURIComponent(g.email);
+    agenda.innerHTML =
+      '<p class="hint">Vue en direct de votre Google Agenda (vous devez être connecté à votre compte Google dans ce navigateur). Chaque RDV pris sur votre page s\'y ajoute automatiquement.</p>'
+      + '<div class="cal-wrap"><iframe loading="lazy" src="https://calendar.google.com/calendar/embed?src='+src+'&ctz=Europe%2FParis&mode=WEEK&wkst=2&showTitle=0&showPrint=0&showTabs=1&showCalendars=0"></iframe></div>'
+      + '<div style="margin-top:10px"><a class="btn btn-ghost" target="_blank" href="https://calendar.google.com/calendar/">Ouvrir Google Agenda</a></div>';
+  } else {
+    gstate.innerHTML = '<span style="color:#94a3b8">○ Google Agenda non connecté</span>';
+    agenda.innerHTML = '<p class="hint">Connectez votre compte Google pour afficher votre agenda en direct ici et synchroniser automatiquement chaque rendez-vous.</p>'
+      + '<a class="btn btn-primary" href="/app/settings">Connecter Google</a><p class="hint" style="margin-top:14px">En attendant, vos rendez-vous restent visibles dans la liste ci-dessous.</p>';
+  }
+
+  loadAppointments();
+  loadServices();
+}
+
+async function loadAppointments(){
+  const list = document.getElementById('list');
+  const aps = await (await fetch('/api/booking/appointments')).json();
+  const now = Date.now();
+  const upcoming = (aps||[]).filter(a => new Date(a.end||a.start).getTime() >= now && a.status!=='cancelled');
+  const past = (aps||[]).filter(a => !(new Date(a.end||a.start).getTime() >= now && a.status!=='cancelled'));
+  const row = a => {
+    const c = a.customer||{};
+    const who = esc(c.name||'Client') + (c.phone? ' · '+esc(c.phone):'') ;
+    const sub = [c.email?esc(c.email):'', c.address?esc(c.address):''].filter(Boolean).join(' — ');
+    const link = a.calendarLink? ' · <a target="_blank" href="'+esc(a.calendarLink)+'">Agenda</a>' : '';
+    return '<div class="rdv"><div class="when">'+fmt(a.start)+'</div>'
+      + '<div class="who"><b>'+esc(a.serviceName||'')+'</b> — '+who+ (sub?'<small>'+sub+'</small>':'') +'</div>'
+      + '<span class="pill '+esc(a.status)+'">'+esc(a.status)+'</span>'+link+'</div>';
+  };
+  let html = '';
+  html += '<div style="font-weight:700;margin:4px 0 6px;color:#1d4ed8">À venir ('+upcoming.length+')</div>';
+  html += upcoming.length? upcoming.map(row).join('') : '<p class="hint">Aucun rendez-vous à venir pour l\'instant.</p>';
+  if(past.length){
+    html += '<div style="font-weight:700;margin:16px 0 6px;color:#6b7280">Passés / annulés ('+past.length+')</div>';
+    html += past.map(row).join('');
+  }
+  list.innerHTML = html;
+}
+
+let services = [];
+async function loadServices(){
+  services = await (await fetch('/api/booking/myservices')).json();
+  renderRows();
+}
+function renderRows(){
+  const c = document.getElementById('srvRows');
+  c.innerHTML = services.map((s,i)=>`
+    <div class="srv-row">
+      <input value="${esc(s.name)}" placeholder="Nom (ex. Visite de bien)" oninput="upd(${i},'name',this.value)" />
+      <input type="number" min="5" step="5" value="${Number(s.durationMin)||30}" placeholder="min" oninput="upd(${i},'durationMin',this.value)" />
+      <input class="desc" value="${esc(s.description||'')}" placeholder="Description (optionnel)" oninput="upd(${i},'description',this.value)" />
+      <button class="iconbtn" title="Supprimer" onclick="delRow(${i})">✕</button>
+    </div>`).join('');
+}
+function upd(i,k,v){ services[i][k] = k==='durationMin'? Number(v) : v; }
+function addRow(){ services.push({name:'',durationMin:30,description:''}); renderRows(); }
+function delRow(i){ services.splice(i,1); renderRows(); }
+async function saveServices(){
+  const msg = document.getElementById('srvMsg');
+  msg.textContent = 'Enregistrement…'; msg.style.color='#6b7280';
+  const r = await fetch('/api/booking/myservices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({services})});
+  const d = await r.json();
+  if(d.error){ msg.textContent = d.error; msg.style.color='#b91c1c'; return; }
+  services = d; renderRows();
+  msg.textContent = '✓ Prestations enregistrées'; msg.style.color='#15803d';
+}
+function copyLink(){
+  const inp = document.getElementById('bookLink');
+  inp.select(); navigator.clipboard.writeText(inp.value).then(()=>{
+    const b = event.target; const t=b.textContent; b.textContent='✓ Copié'; setTimeout(()=>b.textContent=t,1500);
+  }).catch(()=>{});
+}
+init();
+</script>
+</body>
+</html>
