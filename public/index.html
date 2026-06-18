@@ -19,6 +19,7 @@
   <aside class="sidebar">
     <a class="logo" href="/app"><span class="mark">A</span> Artéo</a>
     <a class="nav-link" href="/app"><span class="i">📊</span> Tableau de bord</a>
+    <a class="nav-link" href="/app/profil"><span class="i">🏢</span> Mon entreprise</a>
     <a class="nav-link active" href="/app/invoices"><span class="i">➕</span> Nouvelle facture</a>
     <a class="nav-link" href="/app/factures"><span class="i">🧾</span> Mes factures</a>
     <a class="nav-link" href="/app/quotes"><span class="i">📝</span> Devis</a>
@@ -299,8 +300,19 @@ function pickClient(i){
   set('b_siret', c.siret); set('b_vat', c.vatId); set('b_email', c.email);
   hideDrop();
 }
+// Pré-remplit l'émetteur (vendeur) à partir de « Mon entreprise », si renseigné.
+async function loadSellerProfile(){
+  try {
+    const p = await (await fetch('/api/profile')).json();
+    if(!p || !p.name) return; // pas de profil enregistré → on garde les valeurs par défaut
+    const map = { name:'s_name', siret:'s_siret', vatId:'s_vat', line1:'s_line1', postalCode:'s_cp', city:'s_city', rcs:'s_rcs', phone:'s_phone', email:'s_email', website:'s_web', iban:'s_iban', bic:'s_bic', insurance:'s_ins', rge:'s_rge' };
+    for(const k in map){ const el=document.getElementById(map[k]); if(el && p[k]!=null && p[k]!=='') el.value=p[k]; }
+    if(p.logo){ invLogo = p.logo; const ls=document.getElementById('logoState'); if(ls) ls.textContent='✓ Logo (Mon entreprise)'; }
+  } catch(e){}
+}
 render();
 loadClients();
+loadSellerProfile();
 </script>
 </body>
 </html>
