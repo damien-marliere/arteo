@@ -11,10 +11,9 @@ interface AccountBooking {
 
 function defaultServices(): Service[] {
   return [
-    { id: "depannage", name: "Dépannage urgent", durationMin: 60, description: "Fuite, panne, intervention rapide" },
-    { id: "devis", name: "Devis sur place", durationMin: 30, description: "Visite et chiffrage gratuit" },
-    { id: "installation", name: "Installation / pose", durationMin: 120, description: "Chauffe-eau, sanitaire, robinetterie" },
-    { id: "entretien", name: "Entretien annuel", durationMin: 45, description: "Maintenance chaudière / plomberie" },
+    { id: "premier-rdv", name: "Premier rendez-vous", durationMin: 30, description: "Prise de contact / découverte du besoin" },
+    { id: "rdv-sur-place", name: "Rendez-vous sur place", durationMin: 60, description: "Visite ou intervention sur site" },
+    { id: "estimation", name: "Estimation / devis", durationMin: 45, description: "Évaluation et chiffrage" },
   ];
 }
 function defaultHours(): BusinessHours {
@@ -30,6 +29,24 @@ function ws(accountId: string): AccountBooking {
 }
 
 export function listServices(accountId: string): Service[] {
+  return ws(accountId).services;
+}
+// Remplace l'ensemble des prestations d'un compte (page Mes RDV).
+export function setServices(accountId: string, services: Service[]): Service[] {
+  const slug = (s: string) =>
+    String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "prestation";
+  const seen = new Set<string>();
+  const clean: Service[] = (services || [])
+    .filter((s) => s && String(s.name || "").trim())
+    .map((s) => {
+      let id = slug(s.name);
+      while (seen.has(id)) id += "-" + Math.floor(Math.random() * 1000);
+      seen.add(id);
+      const d = Math.max(5, Math.min(480, Math.round(Number(s.durationMin) || 30)));
+      return { id, name: String(s.name).trim().slice(0, 80), durationMin: d, description: String(s.description || "").trim().slice(0, 160) };
+    });
+  ws(accountId).services = clean.length ? clean : defaultServices();
   return ws(accountId).services;
 }
 export function getService(accountId: string, id: string): Service | undefined {
