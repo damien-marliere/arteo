@@ -6,6 +6,7 @@ export * from "./types.js";
 export { generateSlots } from "./slots.js";
 export {
   listServices,
+  setServices,
   getService,
   listAppointments,
   updateAppointmentStatus,
