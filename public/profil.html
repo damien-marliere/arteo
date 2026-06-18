@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Artéo — Mon entreprise</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/assets/app.css" />
+<style>
+  .siretbar { display:flex; gap:10px; flex-wrap:wrap; align-items:flex-end; }
+  .siretbar > div { flex:1; min-width:200px; }
+  .ok { background:#dcfce7; color:#15803d; padding:10px 12px; border-radius:8px; font-size:14px; }
+  .ko { background:#fee2e2; color:#b91c1c; padding:10px 12px; border-radius:8px; font-size:14px; }
+  .hint { font-size:13px; color:var(--muted); margin:0 0 14px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <a class="logo" href="/app"><span class="mark">A</span> Artéo</a>
+    <a class="nav-link" href="/app"><span class="i">📊</span> Tableau de bord</a>
+    <a class="nav-link active" href="/app/profil"><span class="i">🏢</span> Mon entreprise</a>
+    <a class="nav-link" href="/app/invoices"><span class="i">➕</span> Nouvelle facture</a>
+    <a class="nav-link" href="/app/factures"><span class="i">🧾</span> Mes factures</a>
+    <a class="nav-link" href="/app/quotes"><span class="i">📝</span> Devis</a>
+    <a class="nav-link" href="/app/dunning"><span class="i">⏰</span> Relances</a>
+    <a class="nav-link" href="/app/abonnement"><span class="i">💳</span> Abonnement</a>
+    <a class="nav-link" href="/app/settings"><span class="i">⚙️</span> Réglages email</a>
+    <div class="spacer"></div>
+    <div class="foot"><a href="/app">← Retour</a></div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar"><h1>Mon entreprise</h1><div class="right" id="status"></div></div>
+
+    <div class="card">
+      <h2>Remplissage automatique par SIRET</h2>
+      <p class="hint">Saisissez votre SIRET (14 chiffres) : on récupère votre raison sociale, votre adresse et votre n° de TVA depuis la base officielle des entreprises. Vous complétez ensuite le reste une seule fois.</p>
+      <div class="siretbar">
+        <div><label>SIRET</label><input id="siret" placeholder="81234567800019" /></div>
+        <button class="btn btn-primary" onclick="fillFromSiret()">🔎 Récupérer mes infos</button>
+      </div>
+      <div id="srMsg" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <h2>Coordonnées de l'entreprise (émetteur)</h2>
+      <div class="grid2">
+        <div><label>Raison sociale</label><input id="name" placeholder="Plomberie Martin SARL" /></div>
+        <div><label>N° TVA intracommunautaire</label><input id="vatId" placeholder="FR40812345678" /></div>
+        <div><label>Adresse</label><input id="line1" placeholder="12 rue des Lilas" /></div>
+        <div><label>Code postal</label><input id="postalCode" placeholder="69003" /></div>
+        <div><label>Ville</label><input id="city" placeholder="Lyon" /></div>
+        <div><label>RCS</label><input id="rcs" placeholder="RCS Lyon 812 345 678" /></div>
+        <div><label>Téléphone</label><input id="phone" placeholder="04 78 00 00 00" /></div>
+        <div><label>Email</label><input id="email" placeholder="contact@mon-entreprise.fr" /></div>
+        <div><label>Site web</label><input id="website" placeholder="www.mon-entreprise.fr" /></div>
+        <div><label>IBAN</label><input id="iban" placeholder="FR76 ..." /></div>
+        <div><label>BIC</label><input id="bic" placeholder="BNPAFRPPXXX" /></div>
+        <div><label>Assurance pro / décennale</label><input id="insurance" placeholder="AXA n° 123456" /></div>
+        <div><label>RGE / Qualibat (bâtiment)</label><input id="rge" placeholder="" /></div>
+        <div style="grid-column:1/-1"><label>Logo (optionnel)</label>
+          <input type="file" accept="image/png,image/jpeg" onchange="loadLogo(this)" />
+          <span id="logoState" style="font-size:12px;color:var(--muted);margin-left:8px"></span>
+          <button type="button" class="btn btn-ghost" style="padding:4px 10px;font-size:12px;margin-left:8px" onclick="clearLogo()">Retirer</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;align-items:center">
+        <button class="btn btn-primary" onclick="saveProfile()">Enregistrer mon entreprise</button>
+        <span style="font-size:13px;color:var(--muted)">Ces infos se pré-rempliront automatiquement dans vos devis et factures.</span>
+      </div>
+      <div id="msg" style="margin-top:12px"></div>
+    </div>
+  </main>
+</div>
+<script>
+const FIELDS = ['name','siret','vatId','line1','postalCode','city','rcs','phone','email','website','iban','bic','insurance','rge'];
+const val = id => (document.getElementById(id).value || '').trim();
+const set = (id,v) => { const el=document.getElementById(id); if(el && v!=null) el.value=v; };
+let logo = null;
+function loadLogo(input){ const f=input.files[0]; if(!f) return; if(f.size>3000000){ alert('Image trop lourde (max 3 Mo).'); return; }
+  const r=new FileReader(); r.onload=e=>{ logo=e.target.result; document.getElementById('logoState').textContent='✓ Logo ajouté'; }; r.readAsDataURL(f); }
+function clearLogo(){ logo=null; document.getElementById('logoState').textContent=''; }
+
+async function load(){
+  if((await fetch('/api/me')).status===401){ location.href='/login'; return; }
+  const p = await (await fetch('/api/profile')).json();
+  FIELDS.forEach(f => set(f, p[f] || ''));
+  if(p.logo){ logo = p.logo; document.getElementById('logoState').textContent='✓ Logo enregistré'; }
+  document.getElementById('status').innerHTML = (p && p.name)
+    ? '<span style="color:var(--accent)">● Entreprise enregistrée</span>'
+    : '<span style="color:#94a3b8">○ À compléter</span>';
+}
+async function fillFromSiret(){
+  const q = val('siret');
+  const msg = document.getElementById('srMsg');
+  if(q.replace(/\D/g,'').length < 9){ msg.innerHTML='<div class="ko">Saisissez un SIRET (14 chiffres) ou au moins le SIREN (9 chiffres).</div>'; return; }
+  msg.innerHTML = 'Recherche en cours…';
+  try {
+    const r = await (await fetch('/api/company-search?q='+encodeURIComponent(q))).json();
+    const c = (r||[])[0];
+    if(!c){ msg.innerHTML='<div class="ko">Entreprise introuvable. Vérifiez le numéro, ou saisissez les champs à la main.</div>'; return; }
+    set('name', c.name); set('siret', c.siret || q); set('vatId', c.vatId);
+    set('line1', c.line1); set('postalCode', c.postalCode); set('city', c.city);
+    msg.innerHTML = '<div class="ok">✓ Infos récupérées : '+(c.name||'')+'. Complétez l\'IBAN, le téléphone, etc., puis « Enregistrer ».</div>';
+  } catch(e){ msg.innerHTML='<div class="ko">Service momentanément indisponible. Réessayez ou saisissez à la main.</div>'; }
+}
+async function saveProfile(){
+  const body = {}; FIELDS.forEach(f => body[f] = val(f)); body.logo = logo;
+  const r = await (await fetch('/api/profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+  document.getElementById('msg').innerHTML = r.error
+    ? '<div class="ko">'+r.error+'</div>'
+    : '<div class="ok">✓ Enregistré. Vos devis et factures utiliseront automatiquement ces informations.</div>';
+  load();
+}
+load();
+</script>
+</body>
+</html>
