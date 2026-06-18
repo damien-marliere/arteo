@@ -16,7 +16,7 @@ import { book, generateSlots, listServices, getService, listAppointments, update
 import { startCall, handleTurn } from "./receptionist/index.js";
 import { runReviewRequests, listReviewRequests, setReviewConfig } from "./reviews/index.js";
 import { saveQuote, listQuotes, getQuote, setStatus, quoteTotal, toInvoice, markConverted } from "./quotes/index.js";
-import { signup, login, logout, requireAuth, accountFromToken, countAccounts, firstAccountId, listAccountIds, getSmtp, setSmtp, getGmailOAuth, setGmailOAuth, setPlan, getSubscription } from "./auth/index.js";
+import { signup, login, logout, requireAuth, accountFromToken, countAccounts, firstAccountId, listAccountIds, getSmtp, setSmtp, getGmailOAuth, setGmailOAuth, setPlan, getSubscription, getProfile, setProfile } from "./auth/index.js";
 import { googleConfigured, authUrl, exchangeCode, userEmail, createCalendarEvent } from "./oauth/google.js";
 import { load, save, saveNow } from "./persistence.js";
 import { llmStatus } from "./llm/index.js";
@@ -31,8 +31,13 @@ app.use("/assets", express.static(join(__dirname, "..", "public", "assets")));
 const loaded = load();
 console.log(loaded ? "Persistance : état rechargé depuis le disque." : "Persistance : démarrage à vide.");
 
-const page = (file: string) => async (_req: express.Request, res: express.Response) =>
-  res.type("html").send(await readFile(join(__dirname, "..", "public", file), "utf8"));
+// Widget de chat (assistant Artéo) injecté en pop-up sur toutes les pages.
+const CHAT_SNIPPET = `\n<script src="/assets/chat.js" defer></script>\n`;
+const page = (file: string) => async (_req: express.Request, res: express.Response) => {
+  let html = await readFile(join(__dirname, "..", "public", file), "utf8");
+  if (html.includes("</body>")) html = html.replace("</body>", CHAT_SNIPPET + "</body>");
+  res.type("html").send(html);
+};
 
 const auth = requireAuth();          // API : 401 si non connecté
 const authPage = requireAuth(true);  // Pages : redirige vers /login
@@ -44,6 +49,13 @@ const publicAcc = (req: express.Request) =>
   String(req.query.account ?? req.body?.accountId ?? firstAccountId() ?? "demo");
 // Config d'envoi email d'un compte : Google OAuth ou SMTP (mot de passe d'application).
 const sendCfg = (accountId: string) => ({ smtp: getSmtp(accountId), gmailOAuth: getGmailOAuth(accountId) });
+// Calcule le n° de TVA intracommunautaire FR à partir d'un SIRET/SIREN.
+function frVatId(siretOrSiren: string): string {
+  const siren = String(siretOrSiren || "").replace(/\D/g, "").slice(0, 9);
+  if (siren.length !== 9) return "";
+  const key = (12 + 3 * (Number(siren) % 97)) % 97;
+  return `FR${String(key).padStart(2, "0")}${siren}`;
+}
 
 // ============ AUTHENTIFICATION (public) ============
 app.get("/login", page("login.html"));
@@ -87,10 +99,105 @@ app.get("/app/factures", authPage, page("factures.html"));
 app.get("/app/quotes", authPage, page("quotes.html"));
 app.get("/app/dunning", authPage, page("dunning.html"));
 app.get("/app/abonnement", authPage, page("abonnement.html"));
+app.get("/app/profil", authPage, page("profil.html"));
 
 // ============ PAGES CLIENT (publiques) ============
 app.get("/book", page("book.html"));
 app.get("/receptionist", page("receptionist.html"));
+
+// ============ ASSISTANT / CHATBOT (public — site vitrine + back-office) ============
+// Base de connaissances Artéo : répond aux questions sur le site et le back-office.
+// Fonctionne sans clé IA (correspondance par mots-clés). Réponses au format HTML léger.
+interface KbEntry { keys: string[]; a: string; sug?: string[] }
+const norm = (s: string) =>
+  String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+const KB: KbEntry[] = [
+  { keys: ["bonjour", "salut", "coucou", "hello", "bonsoir", "hey"],
+    a: "Bonjour 👋 Je suis l'assistant Artéo. Posez-moi une question sur la facturation, les devis, les relances, les tarifs, la connexion Google, les RDV ou la réforme 2026.",
+    sug: ["Quels sont les tarifs ?", "Comment créer une facture ?", "Comment connecter Google ?"] },
+  { keys: ["c est quoi arteo", "arteo c est quoi", "que fait arteo", "a quoi sert", "presentation", "qu est ce que arteo", "ca sert a quoi"],
+    a: "<b>Artéo</b> est le logiciel tout-en-un des artisans : facturation électronique (conforme à la réforme 2026), devis, relances automatiques des impayés, prise de rendez-vous en ligne avec synchronisation Google Agenda, réceptionniste IA et demandes d'avis Google — le tout au même endroit.",
+    sug: ["Quels sont les tarifs ?", "Comment commencer ?"] },
+  { keys: ["tarif", "prix", "formule", "combien", "cout", "coute", "abonnement", "starter", "pro", "payer", "plan"],
+    a: "Trois formules : <b>Starter à 19€/mois</b> (facturation + devis), <b>Pro à 49€/mois</b> (+ relances automatiques et RDV) et <b>IA à 99€/mois</b> (+ réceptionniste IA et avis Google). Vous profitez d'un <b>essai gratuit de 7 jours</b> sur la facturation, sans carte bancaire. On change de formule dans <i>Abonnement</i>.",
+    sug: ["Comment marche l'essai gratuit ?", "Comment changer de formule ?"] },
+  { keys: ["essai", "gratuit", "trial", "essayer", "7 jours", "sept jours", "test gratuit"],
+    a: "L'<b>essai gratuit dure 7 jours</b> et porte sur la facturation, <b>sans carte bancaire</b>. Le compteur de jours restants s'affiche sur votre tableau de bord. À la fin, vous choisissez une formule dans <i>Abonnement</i>.",
+    sug: ["Quels sont les tarifs ?", "Comment changer de formule ?"] },
+  { keys: ["changer de formule", "changer formule", "changer abonnement", "upgrade", "passer pro", "modifier formule"],
+    a: "Allez dans <b>💳 Abonnement</b> (menu de gauche), puis cliquez sur la formule souhaitée — Starter, Pro ou IA. Le changement est immédiat.",
+    sug: ["Quels sont les tarifs ?"] },
+  { keys: ["creer une facture", "faire une facture", "nouvelle facture", "facturer", "emettre facture", "comment facturer"],
+    a: "Cliquez sur <b>➕ Nouvelle facture</b> dans le menu. Renseignez le client (le SIRET remplit ses infos automatiquement), ajoutez vos lignes, et générez le PDF <b>Factur-X</b> conforme. Si vous avez rempli <i>Mon entreprise</i>, vos coordonnées d'émetteur sont déjà pré-remplies.",
+    sug: ["C'est quoi Factur-X ?", "Comment envoyer la facture par email ?"] },
+  { keys: ["facturx", "factur x", "factur-x", "conforme", "conformite", "norme", "electronique", "en 16931"],
+    a: "<b>Factur-X</b> est le format français de facture électronique : un PDF lisible qui contient aussi les données structurées (norme EN 16931) exigées par la réforme 2026. Artéo génère ce format automatiquement à chaque facture.",
+    sug: ["Artéo est-il agréé ?", "Comment créer une facture ?"] },
+  { keys: ["agree", "agreee", "plateforme agreee", "pdp", "certifie", "habilite", "homologue", "agrement"],
+    a: "Artéo génère des factures au <b>bon format (Factur-X / EN 16931)</b>, conformes aux exigences techniques. En revanche Artéo n'est pas (encore) immatriculé comme <b>Plateforme Agréée (PA)</b> par la DGFiP — c'est l'étape qui permet de transmettre officiellement les factures via l'annuaire. Pour la transmission, Artéo se connectera à une PA agréée. Le calendrier : réception obligatoire pour tous au 1ᵉʳ sept. 2026, émission pour les artisans au 1ᵉʳ sept. 2027.",
+    sug: ["C'est quoi Factur-X ?", "Quels sont les tarifs ?"] },
+  { keys: ["devis", "faire un devis", "creer devis", "convertir devis", "transformer devis"],
+    a: "Menu <b>📝 Devis</b> : créez un devis, envoyez-le en PDF, et une fois accepté, <b>convertissez-le en facture</b> en un clic (les lignes et le client sont repris automatiquement).",
+    sug: ["Comment créer une facture ?", "Comment envoyer un devis par email ?"] },
+  { keys: ["relance", "relances", "impaye", "impayes", "retard", "penalite", "penalites", "dunning", "recouvrer", "rappel paiement"],
+    a: "Menu <b>⏰ Relances</b> : Artéo suit vos factures impayées et envoie des relances automatiques à J+7, J+15 et J+30, en calculant les pénalités de retard. Vous gardez un <b>historique des emails de relance</b> envoyés à chaque client.",
+    sug: ["Où voir l'historique des relances ?", "Comment connecter Google pour envoyer les emails ?"] },
+  { keys: ["historique relance", "historique des mails", "historique mail", "suivi relance", "voir les relances envoyees", "mails envoyes"],
+    a: "Dans <b>⏰ Relances</b>, chaque facture affiche l'historique des emails envoyés (date, objet, contenu, étape J+7/J+15/J+30). Vous suivez ainsi précisément ce qui a été relancé pour chaque client.",
+    sug: ["Comment marchent les relances ?"] },
+  { keys: ["google", "connecter google", "compte google", "se connecter avec google", "gmail", "agenda", "calendar", "calendrier"],
+    a: "Dans <b>⚙️ Réglages email</b>, cliquez sur <b>« Se connecter avec Google »</b> : un seul clic connecte votre compte Google. Cela permet d'<b>envoyer vos factures et relances</b> depuis votre Gmail <i>et</i> de <b>synchroniser vos RDV avec Google Agenda</b> automatiquement. Pas de réglage technique à faire.",
+    sug: ["Comment prendre des RDV en ligne ?", "Comment envoyer une facture par email ?"] },
+  { keys: ["rdv", "rendez vous", "reservation", "prise de rendez vous", "portail", "booking", "creneaux", "agenda en ligne"],
+    a: "Menu <b>📅 Portail RDV</b> : une page de réservation publique où vos clients choisissent un créneau. Si votre compte Google est connecté, chaque RDV s'ajoute automatiquement à votre <b>Google Agenda</b>.",
+    sug: ["Comment connecter Google Agenda ?"] },
+  { keys: ["mon entreprise", "profil", "siret", "rempli automatiquement", "mes coordonnees", "emetteur", "infos entreprise", "tva"],
+    a: "Menu <b>🏢 Mon entreprise</b> : saisissez votre <b>SIRET</b> et Artéo récupère automatiquement votre raison sociale, votre adresse et votre n° de TVA depuis la base officielle. Complétez l'IBAN, le logo, etc. une seule fois — ces infos se <b>pré-remplissent ensuite dans tous vos devis et factures</b>.",
+    sug: ["Comment créer une facture ?"] },
+  { keys: ["envoyer par email", "envoyer facture", "envoyer devis", "email facture", "smtp", "mot de passe application", "envoyer mail"],
+    a: "Configurez l'envoi dans <b>⚙️ Réglages email</b> : soit en <b>1 clic via « Se connecter avec Google »</b>, soit avec un mot de passe d'application SMTP. Ensuite, depuis une facture ou un devis, le bouton <b>Envoyer par email</b> l'expédie en PDF au client.",
+    sug: ["Comment connecter Google ?"] },
+  { keys: ["avis", "avis google", "review", "e reputation", "reputation", "demander avis", "note google"],
+    a: "Artéo peut envoyer automatiquement une <b>demande d'avis Google</b> à vos clients après une prestation (formule IA), pour améliorer votre visibilité locale.",
+    sug: ["Quels sont les tarifs ?"] },
+  { keys: ["receptionniste", "standard", "appel", "telephone", "ia vocale", "repondre au telephone", "secretaire"],
+    a: "Le <b>📞 Réceptionniste IA</b> simule la prise d'appels : il répond aux questions courantes et oriente vos clients (formule IA). Une démo est accessible depuis le menu.",
+    sug: ["Quels sont les tarifs ?"] },
+  { keys: ["commencer", "demarrer", "creer un compte", "inscription", "s inscrire", "comment debuter", "premiers pas", "creer mon compte"],
+    a: "Cliquez sur <b>Créer un compte</b>, choisissez une formule (essai gratuit 7 jours), puis : 1) remplissez <b>🏢 Mon entreprise</b> avec votre SIRET, 2) connectez Google dans <b>⚙️ Réglages email</b>, 3) créez votre première <b>facture</b> ou <b>devis</b>. C'est parti !",
+    sug: ["Comment remplir Mon entreprise ?", "Comment connecter Google ?"] },
+  { keys: ["mes factures", "liste factures", "retrouver facture", "telecharger facture", "voir mes factures"],
+    a: "Menu <b>🧾 Mes factures</b> : la liste de toutes vos factures émises, avec statut (payée / impayée), montant et la possibilité de <b>re-télécharger le PDF Factur-X</b>.",
+    sug: ["Comment créer une facture ?"] },
+  { keys: ["donnees", "perdu", "efface", "reset", "sauvegarde", "disparu", "redeploiement"],
+    a: "Sur la version d'essai gratuite, les données peuvent être réinitialisées à chaque mise à jour du serveur. Pour une conservation durable de vos factures et comptes, une option de stockage permanent est prévue.",
+    sug: ["Quels sont les tarifs ?"] },
+  { keys: ["contact", "aide", "support", "probleme", "bug", "joindre"],
+    a: "Pour une question précise, décrivez votre besoin ici et je vous oriente vers la bonne page. Pour un souci technique, votre interlocuteur Artéo reste joignable par email.",
+    sug: ["Quels sont les tarifs ?", "Comment créer une facture ?"] },
+];
+const KB_FALLBACK_SUG = ["Quels sont les tarifs ?", "Comment créer une facture ?", "Comment connecter Google ?", "C'est quoi Artéo ?"];
+function answerAssistant(question: string): { answer: string; suggestions: string[] } {
+  const nq = norm(question);
+  if (!nq) return { answer: "Posez-moi une question sur Artéo 🙂", suggestions: KB_FALLBACK_SUG };
+  let best: KbEntry | null = null, bestScore = 0;
+  for (const e of KB) {
+    let score = 0;
+    for (const k of e.keys) {
+      const nk = norm(k);
+      if (!nk) continue;
+      if (nq.includes(nk)) score += nk.length >= 5 ? 3 : 2;          // expression entière trouvée
+      else if (nk.split(" ").every((w) => w.length > 2 && nq.includes(w))) score += 1; // tous les mots présents
+    }
+    if (score > bestScore) { bestScore = score; best = e; }
+  }
+  if (best && bestScore >= 2) return { answer: best.a, suggestions: best.sug ?? KB_FALLBACK_SUG };
+  return {
+    answer: "Je n'ai pas de réponse exacte à cette question 🤔 Je peux vous aider sur : la <b>facturation</b>, les <b>devis</b>, les <b>relances</b>, les <b>tarifs</b>, la <b>connexion Google</b>, les <b>RDV</b>, <b>Mon entreprise</b> et la <b>réforme 2026</b>. Choisissez un sujet ci-dessous ou reformulez.",
+    suggestions: KB_FALLBACK_SUG,
+  };
+}
+app.post("/api/assistant", (req, res) => res.json(answerAssistant(String(req.body?.question ?? ""))));
 
 // ============ ÉTAT IA (LLM) ============
 app.get("/api/llm/status", (_req, res) => res.json(llmStatus()));
@@ -107,6 +214,13 @@ app.get("/api/dashboard", auth, (req, res) => {
     appointments: { total: appts.length, upcoming: appts.filter((x) => x.status === "booked" && new Date(x.start) > now).length },
     reviews: { sent: listReviewRequests(a).length },
   });
+});
+
+// ============ MON ENTREPRISE (profil émetteur réutilisé dans devis/factures) ============
+app.get("/api/profile", auth, (req, res) => res.json(getProfile(acc(req))));
+app.post("/api/profile", auth, (req, res) => {
+  try { setProfile(acc(req), req.body || {}); saveNow(); res.json({ ok: true }); }
+  catch (e: any) { res.status(400).json({ error: e.message }); }
 });
 
 // ============ ABONNEMENT / FORMULES ============
@@ -143,7 +257,7 @@ app.post("/api/invoices", auth, async (req, res) => {
     res.json({ ok: true, invoiceNumber: inv.invoiceNumber });
   } catch (e: any) { res.status(400).json({ error: e.message }); }
 });
-// Liste de toutes les factures émises (pour la page « Mes factures »)
+// Liste de toutes les factures émises (pour la page « Íés factures »)
 app.get("/api/invoices/list", auth, (req, res) => {
   res.json(listRecords(acc(req)).map((r) => ({
     invoiceNumber: r.invoice.invoiceNumber,
@@ -170,6 +284,7 @@ app.get("/api/company-search", auth, async (req, res) => {
       return {
         name: c.nom_complet || c.nom_raison_sociale || "",
         siret: s.siret || "",
+        vatId: frVatId(s.siret || ""),
         line1, postalCode: s.code_postal || "", city: s.libelle_commune || "",
       };
     }).filter((x: any) => x.name && x.city);
@@ -398,7 +513,7 @@ app.get("/api/oauth/google/callback", async (req, res) => {
     if (!accountId || !code) return res.status(400).send("Paramètres OAuth manquants.");
     const { refreshToken, accessToken } = await exchangeCode(code);
     const email = await userEmail(accessToken);
-    if (!refreshToken) return res.status(400).send("Google n'a pas renvoyé de refresh_token. Réessayez en révoquant l'accès puis en réapprouvant.");
+    if (!refreshToken) return res.status(400).send("Google n'a pas renvoy�é de refresh_token. Réessayez en révoquant l'accès puis en réapprouvant.");
     setGmailOAuth(accountId, { email, refreshToken });
     saveNow();
     res.redirect("/app/settings");
