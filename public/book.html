@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Prendre rendez-vous — Plomberie Martin</title>
+<title>Prendre rendez-vous</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 <style>
   body { font-family: "Inter", system-ui, sans-serif !important; }
@@ -32,8 +32,8 @@
 </head>
 <body>
 <header>
-  <h1>Prendre rendez-vous</h1>
-  <p>Réservez en ligne en 30 secondes, 24h/24 — Plomberie Martin</p>
+  <h1 id="bizName">Prendre rendez-vous</h1>
+  <p>Réservez en ligne en 30 secondes, 24h/24<span id="bizSuffix"></span></p>
 </header>
 <main>
   <div class="card">
@@ -59,10 +59,13 @@
 
 <script>
 let services=[], sel=null, slot=null;
+const ACCT = new URLSearchParams(location.search).get('account')||'';
+const Q = ACCT ? ('&account='+encodeURIComponent(ACCT)) : '';
 const fmt = iso => new Date(iso).toLocaleString('fr-FR',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'UTC'});
 
 async function init(){
-  services = await (await fetch('/api/booking/services')).json();
+  try{const biz=await (await fetch('/api/business?account='+encodeURIComponent(ACCT))).json(); if(biz&&biz.name){document.title='Prendre rendez-vous \u2014 '+biz.name; var _h=document.getElementById('bizName'); if(_h)_h.textContent='Prendre rendez-vous \u2014 '+biz.name; var _s=document.getElementById('bizSuffix'); if(_s)_s.textContent=' \u2014 '+biz.name;}}catch(e){}
+  services = await (await fetch('/api/booking/services?_=1'+Q)).json();
   document.getElementById('services').innerHTML = services.map(s=>`
     <div class="svc" data-id="${s.id}" onclick="pick('${s.id}')">
       <b>${s.name}</b><small>${s.durationMin} min — ${s.description||''}</small></div>`).join('');
@@ -70,7 +73,7 @@ async function init(){
 async function pick(id){
   sel=id; slot=null;
   document.querySelectorAll('.svc').forEach(e=>e.classList.toggle('sel', e.dataset.id===id));
-  const slots = await (await fetch(`/api/booking/slots?serviceId=${id}&days=7`)).json();
+  const slots = await (await fetch(`/api/booking/slots?serviceId=${id}&days=7${Q}`)).json();
   document.getElementById('slotCard').style.display='block';
   document.getElementById('formCard').style.display='none';
   document.getElementById('result').innerHTML='';
@@ -84,7 +87,7 @@ function pickSlot(s){
   document.getElementById('formCard').style.display='block';
 }
 async function confirmBooking(){
-  const body={ serviceId:sel, start:slot, customer:{
+  const body={ accountId:ACCT||undefined, serviceId:sel, start:slot, customer:{
     name:document.getElementById('name').value, phone:document.getElementById('phone').value,
     email:document.getElementById('email').value, address:document.getElementById('address').value }};
   const r = await fetch('/api/booking/book',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
