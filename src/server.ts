@@ -12,11 +12,11 @@ import { ConsoleTransport, EmailTransport } from "./dunning/transport.js";
 import { sendEmail, emailConfigured, verifySmtp } from "./email/index.js";
 import { list as listRecords, get as getRecord, recordPayment, outstanding, totalDue, upsert } from "./dunning/store.js";
 import { computePenalties } from "./dunning/penalties.js";
-import { book, generateSlots, listServices, getService, listAppointments, updateAppointmentStatus } from "./booking/index.js";
+import { book, generateSlots, listServices, setServices, getService, listAppointments, updateAppointmentStatus } from "./booking/index.js";
 import { startCall, handleTurn } from "./receptionist/index.js";
 import { runReviewRequests, listReviewRequests, setReviewConfig } from "./reviews/index.js";
 import { saveQuote, listQuotes, getQuote, setStatus, quoteTotal, toInvoice, markConverted } from "./quotes/index.js";
-import { signup, login, logout, requireAuth, accountFromToken, countAccounts, firstAccountId, listAccountIds, getSmtp, setSmtp, getGmailOAuth, setGmailOAuth, setPlan, getSubscription, getProfile, setProfile } from "./auth/index.js";
+import { signup, login, logout, requireAuth, accountFromToken, countAccounts, firstAccountId, listAccountIds, getAccount, getSmtp, setSmtp, getGmailOAuth, setGmailOAuth, setPlan, getSubscription, getProfile, setProfile } from "./auth/index.js";
 import { googleConfigured, authUrl, exchangeCode, userEmail, createCalendarEvent } from "./oauth/google.js";
 import { load, save, saveNow } from "./persistence.js";
 import { llmStatus } from "./llm/index.js";
@@ -100,6 +100,7 @@ app.get("/app/quotes", authPage, page("quotes.html"));
 app.get("/app/dunning", authPage, page("dunning.html"));
 app.get("/app/abonnement", authPage, page("abonnement.html"));
 app.get("/app/profil", authPage, page("profil.html"));
+app.get("/app/rdv", authPage, page("rdv.html"));
 
 // ============ PAGES CLIENT (publiques) ============
 app.get("/book", page("book.html"));
@@ -383,6 +384,16 @@ app.post("/api/dunning/pay", auth, (req, res) => {
 });
 
 // ============ PRISE DE RDV ============
+app.get("/api/business", (req, res) => {
+  const id = publicAcc(req);
+  const name = getProfile(id).name || getAccount(id)?.businessName || "Mon entreprise";
+  res.json({ name });
+});
+app.get("/api/booking/myservices", auth, (req, res) => res.json(listServices(acc(req))));
+app.post("/api/booking/myservices", auth, (req, res) => {
+  try { const s = setServices(acc(req), req.body?.services || []); saveNow(); res.json(s); }
+  catch (e: any) { res.status(400).json({ error: e.message }); }
+});
 app.get("/api/booking/services", (req, res) => res.json(listServices(publicAcc(req))));     // public
 app.get("/api/booking/slots", (req, res) => {                                                // public
   try {
@@ -416,7 +427,10 @@ app.post("/api/booking/book", async (req, res) => {                             
     res.json(a);
   } catch (e: any) { res.status(400).json({ error: e.message }); }
 });
-app.get("/api/booking/appointments", auth, (req, res) => res.json(listAppointments(acc(req))));
+app.get("/api/booking/appointments", auth, (req, res) => {
+  const a = acc(req);
+  res.json(listAppointments(a).map((ap) => ({ ...ap, serviceName: getService(a, ap.serviceId)?.name ?? ap.serviceId })));
+});
 app.post("/api/booking/complete", auth, (req, res) => {
   try { const a = updateAppointmentStatus(acc(req), req.body.id, "completed"); saveNow(); res.json(a); }
   catch (e: any) { res.status(400).json({ error: e.message }); }
