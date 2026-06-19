@@ -5,6 +5,7 @@ import { dumpBooking, restoreBooking } from "./booking/store.js";
 import { dumpReviews, restoreReviews } from "./reviews/index.js";
 import { dumpAuth, restoreAuth } from "./auth/index.js";
 import { dumpQuotes, restoreQuotes } from "./quotes/index.js";
+import { dumpReceptionist, restoreReceptionist } from "./receptionist/index.js";
 
 // Persistance simple par fichier JSON, écriture atomique (rename).
 // Interface volontairement isolée : on peut remplacer le backend par Postgres
@@ -20,6 +21,7 @@ export interface DbSnapshot {
   booking: ReturnType<typeof dumpBooking>;
   reviews: ReturnType<typeof dumpReviews>;
   quotes: ReturnType<typeof dumpQuotes>;
+  receptionist?: ReturnType<typeof dumpReceptionist>;
 }
 
 function snapshot(): DbSnapshot {
@@ -31,6 +33,7 @@ function snapshot(): DbSnapshot {
     booking: dumpBooking(),
     reviews: dumpReviews(),
     quotes: dumpQuotes(),
+    receptionist: dumpReceptionist(),
   };
 }
 
@@ -60,6 +63,7 @@ export function load(): boolean {
     restoreBooking(data.booking);
     restoreReviews(data.reviews);
     restoreQuotes(data.quotes);
+    restoreReceptionist(data.receptionist);
     return true;
   } catch (e) {
     console.error("Persistance : échec du chargement", e);
