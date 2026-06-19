@@ -4,19 +4,22 @@
 import { listServices } from "../booking/store.js";
 import { llmJson } from "../llm/index.js";
 
-const SERVICE_KEYWORDS: Record<string, string[]> = {
-  depannage: ["fuite", "panne", "urgent", "urgence", "inondation", "bouché", "bouche", "ne marche plus", "casse", "cassé", "déborde"],
-  devis: ["devis", "estimation", "prix", "chiffrage", "combien", "tarif"],
-  installation: ["installer", "installation", "pose", "poser", "chauffe-eau", "chauffe eau", "ballon", "robinet", "douche", "wc", "sanitaire", "remplacer"],
-  entretien: ["entretien", "maintenance", "révision", "revision", "annuel", "chaudière", "chaudiere"],
-};
+const norm = (s: string) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+const STOP = new Set(["pour","avec","sur","les","des","une","unu","rdv","rendez","vous","sans","dans","mon","mes","par","ou","et","de","du","la","le","au","aux","un","ma","votre","vos"]);
 
+// Classe la demande sur l'une des prestations DU COMPTE, en dérivant les mots-clés
+// du nom et de la description de chaque prestation (donc valable pour tout métier),
+// plus quelques synonymes génériques (estimation/devis, visite/sur place…).
 export function classifyService(accountId: string, text: string): string | null {
-  const t = text.toLowerCase();
+  const t = norm(text);
   let best: { id: string; score: number } | null = null;
   for (const svc of listServices(accountId)) {
-    const kws = SERVICE_KEYWORDS[svc.id] ?? [];
-    const score = kws.reduce((s, k) => s + (t.includes(k) ? 1 : 0), 0);
+    const blob = norm(`${svc.name} ${svc.description ?? ""}`);
+    const words = blob.split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !STOP.has(w));
+    let score = words.reduce((s, w) => s + (t.includes(w) ? 1 : 0), 0);
+    if (/estim|devis|prix|tarif|chiffr|combien/.test(t) && /estim|devis/.test(blob)) score += 2;
+    if (/(visite|sur place|interven|domicile|deplac|passer)/.test(t) && /(sur place|visite|interven|domicile)/.test(blob)) score += 2;
+    if (/(premier|decouverte|contact|renseign|information|premiere)/.test(t) && /(premier|decouverte|contact)/.test(blob)) score += 2;
     if (score > 0 && (!best || score > best.score)) best = { id: svc.id, score };
   }
   return best?.id ?? null;
