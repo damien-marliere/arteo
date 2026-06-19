@@ -13,7 +13,7 @@ import { sendEmail, emailConfigured, verifySmtp } from "./email/index.js";
 import { list as listRecords, get as getRecord, recordPayment, outstanding, totalDue, upsert } from "./dunning/store.js";
 import { computePenalties } from "./dunning/penalties.js";
 import { book, generateSlots, listServices, setServices, getService, listAppointments, updateAppointmentStatus } from "./booking/index.js";
-import { startCall, handleTurn } from "./receptionist/index.js";
+import { startCall, handleTurn, listCallRecords } from "./receptionist/index.js";
 import { runReviewRequests, listReviewRequests, setReviewConfig } from "./reviews/index.js";
 import { saveQuote, listQuotes, getQuote, setStatus, quoteTotal, toInvoice, markConverted } from "./quotes/index.js";
 import { signup, login, logout, requireAuth, accountFromToken, countAccounts, firstAccountId, listAccountIds, getAccount, getSmtp, setSmtp, getGmailOAuth, setGmailOAuth, setPlan, getSubscription, getProfile, setProfile } from "./auth/index.js";
@@ -439,12 +439,39 @@ app.post("/api/booking/complete", auth, (req, res) => {
 // ============ RÉCEPTIONNISTE IA (webhook public) ============
 app.post("/api/receptionist/start", (req, res) => {
   const id = req.body?.callId ?? `CALL-${Date.now()}`;
-  res.json({ callId: id, ...startCall(publicAcc(req), id) });
+  res.json({ callId: id, ...startCall(publicAcc(req), id, req.body?.from) });
 });
 app.post("/api/receptionist/turn", async (req, res) => {
-  try { const r = await handleTurn(publicAcc(req), req.body.callId, req.body.utterance); saveNow(); res.json(r); }
-  catch (e: any) { res.status(400).json({ error: e.message }); }
+  try {
+    const accountId = publicAcc(req);
+    const r = await handleTurn(accountId, req.body.callId, req.body.utterance);
+    saveNow();
+    // Compte-rendu : à la fin de l'appel, on envoie le récap à l'artisan par email.
+    if (r.done && r.record) sendCallRecap(accountId, r.record).catch(() => {});
+    res.json(r);
+  } catch (e: any) { res.status(400).json({ error: e.message }); }
 });
+// Journal des appels (compte-rendu) — page + API protégées.
+app.get("/app/calls", authPage, page("calls.html"));
+app.get("/api/receptionist/calls", auth, (req, res) => res.json(listCallRecords(acc(req))));
+// Envoie le compte-rendu d'un appel à l'artisan (email simulé si non configuré).
+async function sendCallRecap(accountId: string, rec: any) {
+  const acct = getAccount(accountId);
+  if (!acct?.email) return;
+  const t = rec.transcript.map((x: any) => `${x.role === "bot" ? "Assistant" : "Appelant"} : ${x.text}`).join("\n");
+  await sendEmail({
+    to: acct.email,
+    subject: `Compte-rendu d'appel — ${rec.customerName ?? "Appelant"}${rec.urgent ? " (URGENT)" : ""}`,
+    text: `Nouvel appel traité par votre réceptionniste IA.\n\n`
+      + `Résumé : ${rec.summary}\n`
+      + `Issue : ${rec.outcome}\n`
+      + (rec.serviceName ? `Motif : ${rec.serviceName}\n` : "")
+      + (rec.phone ? `Téléphone : ${rec.phone}\n` : "")
+      + (rec.callerNumber ? `Numéro appelant : ${rec.callerNumber}\n` : "")
+      + `Heure : ${new Date(rec.startedAt).toLocaleString("fr-FR")}\n\n`
+      + `--- Transcription ---\n${t}`,
+  }, sendCfg(accountId));
+}
 
 // ============ AVIS GOOGLE (protégé) ============
 app.post("/api/reviews/run", auth, async (req, res) => {
